@@ -34,7 +34,7 @@ export function ProtectedRoute() {
 export function PublicOnlyRoute({ children }: { children: ReactNode }) {
   const { status } = useAuth()
   const [searchParams] = useSearchParams()
-  const redirectTo = searchParams.get("redirect") || "/dashboard"
+  const redirectTo = searchParams.get("redirect") || "/ai-chat"
 
   if (status === "loading") {
     return <RouteLoading />

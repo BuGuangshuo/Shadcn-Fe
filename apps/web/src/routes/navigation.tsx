@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
 import {
+  BotMessageSquareIcon,
   ChartBarIcon,
   CircleHelpIcon,
   DatabaseIcon,
@@ -26,6 +27,11 @@ export type DocumentNavigationItem = {
 }
 
 export const navMain: NavigationItem[] = [
+  {
+    title: "AI Chat",
+    url: "/ai-chat",
+    icon: <BotMessageSquareIcon />,
+  },
   {
     title: "Dashboard",
     url: "/dashboard",
@@ -90,7 +96,7 @@ export const navSecondary: NavigationItem[] = [
 ]
 
 const routeTitles = new Map<string, string>([
-  ["/", "Dashboard"],
+  ["/", "AI Chat"],
   ...navMain.map((item) => [item.url, item.title] as const),
   ...documents.map((item) => [item.url, item.name] as const),
   ...navSecondary.map((item) => [item.url, item.title] as const),

@@ -1,5 +1,11 @@
 import { lazy } from "react"
 
+export const AiChatPage = lazy(() =>
+  import("@/pages/ai-chat").then((module) => ({
+    default: module.AiChatPage,
+  }))
+)
+
 export const DashboardPage = lazy(() =>
   import("@/pages/dashboard").then((module) => ({
     default: module.DashboardPage,

@@ -35,6 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserPublic | null>(null)
   const [session, setSession] = useState<AuthSession | null>(null)
   const refreshPromiseRef = useRef<Promise<StoredAuthTokens> | null>(null)
+  const bootstrapPromiseRef = useRef<Promise<void> | null>(null)
 
   const resetAuthState = useCallback(() => {
     clearStoredAuthTokens()
@@ -100,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [ensureFreshTokens]
   )
 
-  const bootstrap = useCallback(async () => {
+  const runBootstrap = useCallback(async () => {
     const storedTokens = getStoredAuthTokens()
 
     if (!storedTokens) {
@@ -117,6 +118,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       resetAuthState()
     }
   }, [loadAuthenticatedUser, resetAuthState])
+
+  const bootstrap = useCallback(() => {
+    if (!bootstrapPromiseRef.current) {
+      bootstrapPromiseRef.current = runBootstrap().finally(() => {
+        bootstrapPromiseRef.current = null
+      })
+    }
+
+    return bootstrapPromiseRef.current
+  }, [runBootstrap])
 
   const login = useCallback(
     async (username: string, password: string) => {

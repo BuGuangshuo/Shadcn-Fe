@@ -8,12 +8,12 @@ import { SidebarInset, SidebarProvider } from "@workspace/ui/components/sidebar"
 
 export function AppLayout() {
   return (
-    <SidebarProvider>
+    <SidebarProvider className="h-svh overflow-hidden [--header-height:3.5rem]">
       <AppSidebar />
-      <SidebarInset>
+      <SidebarInset className="min-h-0 overflow-hidden">
         <SiteHeader />
-        <div className="flex flex-1 flex-col">
-          <div className="@container/main flex flex-1 flex-col gap-2">
+        <div className="flex min-h-0 flex-1 flex-col overflow-auto">
+          <div className="@container/main flex min-h-0 flex-1 flex-col">
             <Suspense fallback={<RouteLoading />}>
               <Outlet />
             </Suspense>

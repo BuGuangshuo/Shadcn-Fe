@@ -5,6 +5,7 @@ import { RouteLoading } from "@/components/route-loading"
 import { AppLayout } from "@/layouts/app-layout"
 import { ProtectedRoute, PublicOnlyRoute } from "@/router/auth-routes"
 import {
+  AiChatPage,
   DashboardPage,
   LoginPage,
   NotFoundPage,
@@ -31,7 +32,11 @@ export const router = createBrowserRouter([
         children: [
           {
             index: true,
-            element: <Navigate to="/dashboard" replace />,
+            element: <Navigate to="/ai-chat" replace />,
+          },
+          {
+            path: "ai-chat",
+            element: <AiChatPage />,
           },
           {
             path: "dashboard",

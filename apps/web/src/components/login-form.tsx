@@ -114,32 +114,14 @@ export function LoginForm({ className, ...props }: ComponentProps<"div">) {
                   {isSubmitting ? "正在登录" : "登录"}
                 </Button>
               </Field>
-
-              <FieldDescription className="text-center">
-                登录即会创建受保护会话，并在 token 过期前自动续期。
-              </FieldDescription>
             </FieldGroup>
           </form>
 
           <div className="relative hidden bg-muted md:block">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,var(--primary)_0,transparent_28%),linear-gradient(135deg,var(--muted),var(--secondary))]" />
-            <div className="absolute inset-x-8 bottom-8 rounded-2xl bg-background/80 p-5 shadow-sm backdrop-blur">
-              <p className="flex items-center gap-2 text-sm font-medium">
-                <ShieldCheckIcon data-icon="inline-start" />
-                企业级会话保护
-              </p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Bearer token、refresh token、会话 TTL 和服务端登出统一接入。
-              </p>
-            </div>
           </div>
         </CardContent>
       </Card>
-
-      <FieldDescription className="px-6 text-center">
-        点击继续即表示你同意我们的 <Link to="/terms">服务条款</Link> 和{" "}
-        <Link to="/privacy">隐私政策</Link>。
-      </FieldDescription>
     </div>
   )
 }
