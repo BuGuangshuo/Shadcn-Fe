@@ -6,12 +6,6 @@ export const AiChatPage = lazy(() =>
   }))
 )
 
-export const DashboardPage = lazy(() =>
-  import("@/pages/dashboard").then((module) => ({
-    default: module.DashboardPage,
-  }))
-)
-
 export const LoginPage = lazy(() =>
   import("@/pages/login").then((module) => ({
     default: module.LoginPage,

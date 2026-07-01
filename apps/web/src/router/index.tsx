@@ -6,7 +6,6 @@ import { AppLayout } from "@/layouts/app-layout"
 import { ProtectedRoute, PublicOnlyRoute } from "@/router/auth-routes"
 import {
   AiChatPage,
-  DashboardPage,
   LoginPage,
   NotFoundPage,
   PlaceholderPage,
@@ -37,38 +36,6 @@ export const router = createBrowserRouter([
           {
             path: "ai-chat",
             element: <AiChatPage />,
-          },
-          {
-            path: "dashboard",
-            element: <DashboardPage />,
-          },
-          {
-            path: "lifecycle",
-            element: <PlaceholderPage title="Lifecycle" />,
-          },
-          {
-            path: "analytics",
-            element: <PlaceholderPage title="Analytics" />,
-          },
-          {
-            path: "projects",
-            element: <PlaceholderPage title="Projects" />,
-          },
-          {
-            path: "team",
-            element: <PlaceholderPage title="Team" />,
-          },
-          {
-            path: "documents/data-library",
-            element: <PlaceholderPage title="Data Library" />,
-          },
-          {
-            path: "documents/reports",
-            element: <PlaceholderPage title="Reports" />,
-          },
-          {
-            path: "documents/word-assistant",
-            element: <PlaceholderPage title="Word Assistant" />,
           },
           {
             path: "settings",

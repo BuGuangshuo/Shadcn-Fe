@@ -42,7 +42,7 @@
 当前项目有两个 `components.json`，但组件源码集中在 `packages/ui/src/components`。在 `apps/web` 中使用组件时，优先从 `@workspace/ui/components/*` 导入：
 
 ```tsx
-import { Button } from "@workspace/ui/components/button"
+import { Button } from '@workspace/ui/components/button';
 ```
 
 新增 shadcn 组件使用项目包管理器和 Web 应用配置：
@@ -63,6 +63,8 @@ pnpm dlx shadcn@latest add button -c apps/web
 - Button loading 通过 `disabled` + 图标组合实现，图标加 `data-icon`
 - Avatar 必须有 `AvatarFallback`
 - SelectItem 放在 SelectGroup 内，DropdownMenuItem 放在 DropdownMenuGroup 或合理菜单结构内
+- 所有下拉浮层统一使用思考模式下拉样式：白色 `bg-background`、`rounded-2xl`、`p-1.5`、浅色 shadow/ring；选项使用 `min-h-10`、`rounded-xl`、`px-3.5`，hover 和 selected 状态使用 `bg-muted/45`，选中图标使用 `text-primary`
+- 新增下拉优先复用 `@workspace/ui/components/select` 和 `@workspace/ui/components/dropdown-menu` 的默认样式，不要在业务组件里覆盖成其他菜单主题
 - 空状态、提示、分割线、加载态优先使用 `Empty`、`Alert`、`Separator`、`Skeleton` 等已有组件
 
 图标默认使用 `lucide-react`。按钮内图标不要额外写尺寸类，使用组件样式和 `data-icon="inline-start"` / `data-icon="inline-end"`。
