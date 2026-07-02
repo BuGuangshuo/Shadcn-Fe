@@ -1,6 +1,16 @@
 import * as React from 'react';
 import { toast } from 'sonner';
 import {
+  Attachment,
+  AttachmentAction,
+  AttachmentActions,
+  AttachmentContent,
+  AttachmentDescription,
+  AttachmentGroup,
+  AttachmentMedia,
+  AttachmentTitle,
+} from '@workspace/ui/components/attachment';
+import {
   AudioLinesIcon,
   ArrowUpIcon,
   BotIcon,
@@ -21,6 +31,7 @@ import {
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardFooter } from '@workspace/ui/components/card';
 import { Field, FieldGroup, FieldLabel } from '@workspace/ui/components/field';
+import { Marker, MarkerContent, MarkerIcon } from '@workspace/ui/components/marker';
 import { Textarea } from '@workspace/ui/components/textarea';
 import { cn } from '@workspace/ui/lib/utils';
 import {
@@ -195,6 +206,19 @@ function getAttachmentDisplayKind(attachment: Pick<ChatAttachment, 'name' | 'typ
   return DOCUMENT_ATTACHMENT_KINDS.has(kind) ? '文档' : kind;
 }
 
+function formatAttachmentSize(size: number) {
+  if (!Number.isFinite(size) || size <= 0) {
+    return '未知大小';
+  }
+
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const unitIndex = Math.min(Math.floor(Math.log(size) / Math.log(1024)), units.length - 1);
+  const value = size / 1024 ** unitIndex;
+  const precision = unitIndex === 0 || value >= 10 ? 0 : 1;
+
+  return `${value.toFixed(precision)} ${units[unitIndex]}`;
+}
+
 function getFileRelativePath(file: File) {
   return (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
 }
@@ -264,22 +288,17 @@ function AttachmentList({ attachments }: { attachments: ChatAttachment[] }) {
   return (
     <div className="flex w-full flex-col items-end gap-2">
       {attachments.map((attachment) => (
-        <div
-          key={attachment.id}
-          className="flex min-h-16 w-full min-w-0 items-center gap-3 rounded-2xl border bg-background px-3.5 py-2.5 shadow-none"
-        >
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <FileTextIcon className="size-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-semibold text-foreground" title={attachment.name}>
-              {attachment.name}
-            </div>
-            <div className="mt-0.5 text-sm text-muted-foreground">
-              {getAttachmentDisplayKind(attachment)}
-            </div>
-          </div>
-        </div>
+        <Attachment key={attachment.id} className="w-full bg-background">
+          <AttachmentMedia>
+            <FileTextIcon />
+          </AttachmentMedia>
+          <AttachmentContent>
+            <AttachmentTitle title={attachment.name}>{attachment.name}</AttachmentTitle>
+            <AttachmentDescription>
+              {getAttachmentDisplayKind(attachment)} · {formatAttachmentSize(attachment.size)}
+            </AttachmentDescription>
+          </AttachmentContent>
+        </Attachment>
       ))}
     </div>
   );
@@ -293,35 +312,28 @@ function PendingAttachmentCard({
   onRemove: (id: string) => void;
 }) {
   const kind = getAttachmentKind(attachment);
-  const iconLabel = kind === 'HTML' || kind === 'XML' ? '</>' : kind.slice(0, 2);
 
   return (
-    <div className="relative flex h-[4.5rem] w-56 shrink-0 items-center gap-3 rounded-2xl border bg-background px-3 py-2">
-      <div
-        className={cn(
-          'flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-xs font-semibold text-muted-foreground',
-          iconLabel === '</>' && 'font-mono text-base',
-        )}
-      >
-        {iconLabel}
-      </div>
-      <div className="min-w-0 flex-1 pr-5">
-        <div className="truncate text-sm font-semibold text-foreground" title={attachment.name}>
-          {attachment.name}
-        </div>
-        <div className="mt-0.5 text-sm text-muted-foreground">{kind}</div>
-      </div>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-xs"
-        aria-label={`移除 ${attachment.name}`}
-        className="absolute end-1.5 top-1.5 size-6 rounded-full bg-foreground text-background hover:bg-foreground/90 hover:text-background focus-visible:ring-foreground/20"
-        onClick={() => onRemove(attachment.id)}
-      >
-        <XIcon />
-      </Button>
-    </div>
+    <Attachment state="idle" className="w-64 bg-background">
+      <AttachmentMedia>
+        <FileTextIcon />
+      </AttachmentMedia>
+      <AttachmentContent>
+        <AttachmentTitle title={attachment.name}>{attachment.name}</AttachmentTitle>
+        <AttachmentDescription>
+          {kind} · {formatAttachmentSize(attachment.size)}
+        </AttachmentDescription>
+      </AttachmentContent>
+      <AttachmentActions>
+        <AttachmentAction
+          type="button"
+          aria-label={`移除 ${attachment.name}`}
+          onClick={() => onRemove(attachment.id)}
+        >
+          <XIcon />
+        </AttachmentAction>
+      </AttachmentActions>
+    </Attachment>
   );
 }
 
@@ -416,23 +428,28 @@ function ThinkingPanel({ reasoning, isStreaming }: { reasoning: string; isStream
 
   return (
     <div className="overflow-hidden rounded-[10px] border bg-muted/20">
-      <button
-        type="button"
-        className="flex h-10 w-full items-center justify-between gap-3 px-3 text-start text-sm font-semibold text-muted-foreground transition-colors outline-none hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
-        aria-expanded={isOpen}
-        onClick={() => setIsOpen((current) => !current)}
+      <Marker
+        asChild
+        className="h-10 justify-between px-3 font-semibold transition-colors outline-none hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
       >
-        <span className="flex min-w-0 items-center gap-2">
-          <Clock3Icon className="size-4 shrink-0" />
-          <span className="truncate">{isStreaming ? 'Thinking...' : 'Thinking'}</span>
-        </span>
-        <ChevronUpIcon
-          className={cn(
-            'size-4 shrink-0 text-muted-foreground transition-transform',
-            !isOpen && 'rotate-180',
-          )}
-        />
-      </button>
+        <button
+          type="button"
+          aria-expanded={isOpen}
+          onClick={() => setIsOpen((current) => !current)}
+        >
+          <MarkerIcon>
+            <Clock3Icon />
+          </MarkerIcon>
+          <MarkerContent className="flex-1 truncate">
+            {isStreaming ? 'Thinking...' : 'Thinking'}
+          </MarkerContent>
+          <MarkerIcon
+            className={cn('text-muted-foreground transition-transform', !isOpen && 'rotate-180')}
+          >
+            <ChevronUpIcon />
+          </MarkerIcon>
+        </button>
+      </Marker>
       {isOpen && (
         <div className="max-h-[25rem] overflow-y-auto border-t px-4 py-4 text-[0.8125rem] leading-6 text-muted-foreground">
           <p className="break-words whitespace-pre-wrap">{reasoning}</p>
@@ -511,9 +528,9 @@ function AssistantMessageCard({
         </div>
         <div className="flex flex-col px-3 py-3 text-sm leading-7">
           {hasReasoning && isStreaming ? (
-            <span className="mb-3 font-mono text-xs leading-4 text-muted-foreground">
-              Thinking •••
-            </span>
+            <Marker role="status" className="mb-3 font-mono text-xs leading-4">
+              <MarkerContent className="shimmer">Thinking •••</MarkerContent>
+            </Marker>
           ) : null}
           {hasReasoning ? (
             <ThinkingPanel
@@ -941,6 +958,38 @@ export function AiChatPage() {
     );
   }
 
+  function discardTransientConversationSelection({
+    conversationId,
+    conversationIdAtStart,
+  }: {
+    conversationId: string | null;
+    conversationIdAtStart: string | null;
+  }) {
+    if (conversationIdAtStart || !conversationId) {
+      return;
+    }
+
+    if (sessionIdRef.current === conversationId) {
+      sessionIdRef.current = null;
+    }
+
+    if (streamingConversationIdRef.current === conversationId) {
+      streamingConversationIdRef.current = null;
+    }
+
+    if (selectedConversationIdRef.current === conversationId) {
+      selectedConversationIdRef.current = null;
+      setSelectedConversationId(null);
+      window.dispatchEvent(
+        new CustomEvent('ai-chat:selected-conversation-changed', {
+          detail: { id: null },
+        }),
+      );
+    }
+
+    refreshSidebarConversations();
+  }
+
   function markSelectedConversation({ id, title }: { id: string; title?: string | null }) {
     selectedConversationIdRef.current = id;
     setSelectedConversationId(id);
@@ -1158,6 +1207,10 @@ export function AiChatPage() {
               status: 'error',
             }),
           );
+          discardTransientConversationSelection({
+            conversationId: requestConversationId,
+            conversationIdAtStart,
+          });
           return;
         }
 
@@ -1232,6 +1285,10 @@ export function AiChatPage() {
             status: error.name === 'AbortError' ? 'done' : 'error',
           }),
         );
+        discardTransientConversationSelection({
+          conversationId: requestConversationId,
+          conversationIdAtStart,
+        });
       },
     });
 
@@ -1615,7 +1672,7 @@ export function AiChatPage() {
               )}
             >
               {attachments.length ? (
-                <div className="flex max-w-full gap-2 overflow-x-auto pb-1 pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <AttachmentGroup className="max-w-full gap-2 pb-1 pr-1">
                   {attachments.map((attachment) => (
                     <PendingAttachmentCard
                       key={attachment.id}
@@ -1623,7 +1680,7 @@ export function AiChatPage() {
                       onRemove={removeAttachment}
                     />
                   ))}
-                </div>
+                </AttachmentGroup>
               ) : null}
               <div
                 className={cn(

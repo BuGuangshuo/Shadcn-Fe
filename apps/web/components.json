@@ -6,7 +6,7 @@
   "tailwind": {
     "config": "",
     "css": "../../packages/ui/src/styles/globals.css",
-    "baseColor": "zinc",
+    "baseColor": "neutral",
     "cssVariables": true
   },
   "iconLibrary": "lucide",
@@ -18,7 +18,7 @@
     "ui": "@workspace/ui/components"
   },
   "rtl": true,
-  "menuColor": "inverted-translucent",
+  "menuColor": "default",
   "menuAccent": "subtle",
   "registries": {}
 }
