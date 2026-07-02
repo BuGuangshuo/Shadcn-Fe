@@ -134,6 +134,7 @@ const directoryInputProps = {
   directory: '',
   webkitdirectory: '',
 } as React.InputHTMLAttributes<HTMLInputElement>;
+const DOCUMENT_ATTACHMENT_KINDS = new Set(['DOC', 'DOCX', 'ODT', 'PDF', 'RTF', 'TXT']);
 const VOICE_WAVEFORM_BAR_COUNT = 72;
 const VOICE_WAVEFORM_MIN_LEVEL = 0.08;
 
@@ -172,18 +173,6 @@ function mapConversationMessages(conversation: AiChatConversationDetail): ChatMe
   }));
 }
 
-function formatFileSize(size: number) {
-  if (size < 1024) {
-    return `${size} B`;
-  }
-
-  if (size < 1024 * 1024) {
-    return `${(size / 1024).toFixed(1)} KB`;
-  }
-
-  return `${(size / 1024 / 1024).toFixed(1)} MB`;
-}
-
 function getAttachmentKind(attachment: Pick<ChatAttachment, 'name' | 'type'>) {
   const extension = attachment.name.split('.').pop();
 
@@ -198,6 +187,12 @@ function getAttachmentKind(attachment: Pick<ChatAttachment, 'name' | 'type'>) {
   }
 
   return 'FILE';
+}
+
+function getAttachmentDisplayKind(attachment: Pick<ChatAttachment, 'name' | 'type'>) {
+  const kind = getAttachmentKind(attachment);
+
+  return DOCUMENT_ATTACHMENT_KINDS.has(kind) ? '文档' : kind;
 }
 
 function getFileRelativePath(file: File) {
@@ -267,15 +262,23 @@ function getVoiceInputErrorMessage(error: string) {
 
 function AttachmentList({ attachments }: { attachments: ChatAttachment[] }) {
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex w-full flex-col items-end gap-2">
       {attachments.map((attachment) => (
         <div
           key={attachment.id}
-          className="flex min-w-0 items-center gap-2 rounded-lg border bg-background/70 px-2.5 py-1.5 text-xs"
+          className="flex min-h-16 w-full min-w-0 items-center gap-3 rounded-2xl border bg-background px-3.5 py-2.5 shadow-none"
         >
-          <FileTextIcon className="shrink-0 text-muted-foreground" />
-          <span className="truncate font-medium">{attachment.name}</span>
-          <span className="shrink-0 text-muted-foreground">{formatFileSize(attachment.size)}</span>
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+            <FileTextIcon className="size-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-semibold text-foreground" title={attachment.name}>
+              {attachment.name}
+            </div>
+            <div className="mt-0.5 text-sm text-muted-foreground">
+              {getAttachmentDisplayKind(attachment)}
+            </div>
+          </div>
         </div>
       ))}
     </div>
@@ -442,10 +445,12 @@ function ThinkingPanel({ reasoning, isStreaming }: { reasoning: string; isStream
 function UserMessageBubble({ message }: { message: ChatMessage }) {
   return (
     <div className="flex justify-end ps-10">
-      <div className="flex max-w-[min(24rem,72%)] flex-col gap-2 rounded-full bg-muted/45 px-4 py-2 text-sm leading-6 text-foreground">
+      <div className="flex w-full max-w-[min(40rem,72%)] flex-col items-end gap-3">
         {message.attachments?.length ? <AttachmentList attachments={message.attachments} /> : null}
         {message.content ? (
-          <p className="break-words whitespace-pre-wrap">{message.content}</p>
+          <div className="max-w-[min(24rem,100%)] rounded-full bg-muted/45 px-4 py-2 text-sm leading-6 text-foreground">
+            <p className="break-words whitespace-pre-wrap">{message.content}</p>
+          </div>
         ) : null}
       </div>
     </div>
