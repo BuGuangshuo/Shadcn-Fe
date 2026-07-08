@@ -1,325 +1,312 @@
-import { type SSEOutput, XStream } from "@ant-design/x-sdk"
+import { type SSEOutput, XStream } from '@ant-design/x-sdk';
 
-export const AI_CHAT_STREAM_PATH = "/api/v1/ai/chat/stream"
-export const AI_CHAT_CONVERSATIONS_PATH = "/api/v1/ai/chat/conversations"
-export const AI_CHAT_THINKING_MAX_TOKENS = 4096
+export const AI_CHAT_STREAM_PATH = '/api/v1/ai/chat/stream';
+export const AI_CHAT_CONVERSATIONS_PATH = '/api/v1/ai/chat/conversations';
+export const AI_CHAT_THINKING_MAX_TOKENS = 4096;
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(
-  /\/$/,
-  ""
-)
-const AI_CHAT_STREAM_URL =
-  import.meta.env.VITE_AI_CHAT_API_URL || AI_CHAT_STREAM_PATH
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
+const AI_CHAT_STREAM_URL = import.meta.env.VITE_AI_CHAT_API_URL || AI_CHAT_STREAM_PATH;
 
-export type AiChatStreamEventType =
-  "session" | "title" | "reasoning" | "delta" | "done" | "error"
+export type AiChatStreamEventType = 'session' | 'title' | 'reasoning' | 'delta' | 'done' | 'error';
 
-export type AiChatThinkingMode = "auto" | "thinking" | "fast"
+export type AiChatThinkingMode = 'auto' | 'thinking' | 'fast';
 
 export type AiChatConversationSummary = {
-  id: string
-  title: string
-  created_at: string
-  updated_at: string
-  last_message_at: string | null
-}
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  last_message_at: string | null;
+};
+
+export type AiChatConversationAttachment = {
+  filename: string;
+  content_type: string | null;
+  size: number;
+};
 
 export type AiChatConversationMessage = {
-  id: string
-  role: "user" | "assistant"
-  content: string
-  reasoning_content?: string | null
-  created_at: string
-}
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  reasoning_title?: string | null;
+  reasoning_content?: string | null;
+  attachments?: AiChatConversationAttachment[];
+  created_at: string;
+};
 
 export type AiChatConversationDetail = {
-  id: string
-  session_id: string
-  title: string
-  messages: AiChatConversationMessage[]
-  created_at: string
-  updated_at: string
-  last_message_at: string | null
-}
+  id: string;
+  session_id: string;
+  title: string;
+  messages: AiChatConversationMessage[];
+  created_at: string;
+  updated_at: string;
+  last_message_at: string | null;
+};
 
 export type AiChatConversationListResponse = {
-  total: number
-  page: number
-  page_size: number
-  items: AiChatConversationSummary[]
-}
+  total: number;
+  page: number;
+  page_size: number;
+  items: AiChatConversationSummary[];
+};
 
 export type AiChatRequestPayload = {
-  message: string
-  session_id?: string | null
-  thinking_mode?: AiChatThinkingMode
-  model?: string | null
-  temperature?: number | null
-  max_tokens?: number | null
-  system_prompt?: string | null
-  files?: AiChatUploadFile[]
-}
+  message: string;
+  session_id?: string | null;
+  thinking_mode?: AiChatThinkingMode;
+  model?: string | null;
+  temperature?: number | null;
+  max_tokens?: number | null;
+  system_prompt?: string | null;
+  files?: AiChatUploadFile[];
+};
 
 export type AiChatUploadFile = {
-  file: File
-  relativePath: string
-}
+  file: File;
+  relativePath: string;
+};
 
 export type AiChatStreamEvent = {
-  type: AiChatStreamEventType | null
-  sessionId: string | null
-  content: string
-  message: string | null
-  title: string | null
-  reasoning: string | null
-  errorMessage: string | null
-}
+  type: AiChatStreamEventType | null;
+  sessionId: string | null;
+  content: string;
+  message: string | null;
+  title: string | null;
+  reasoning: string | null;
+  reasoningTitle: string | null;
+  reasoningContent: string | null;
+  errorMessage: string | null;
+};
 
 export type AiChatStreamRequest = {
-  run: (params: AiChatRequestPayload) => boolean
-  abort: () => void
-}
+  run: (params: AiChatRequestPayload) => boolean;
+  abort: () => void;
+};
 
 type AiChatStreamCallbacks = {
-  onUpdate?: (chunk: SSEOutput) => void
-  onSuccess?: () => void
-  onError?: (error: Error) => void
-}
+  onUpdate?: (chunk: SSEOutput) => void;
+  onSuccess?: () => void;
+  onError?: (error: Error) => void;
+};
 
-export function createAiChatStreamRequest(
-  accessToken: string,
-  callbacks: AiChatStreamCallbacks
-) {
-  return new AiChatStreamFetchRequest(accessToken, callbacks)
+export function createAiChatStreamRequest(accessToken: string, callbacks: AiChatStreamCallbacks) {
+  return new AiChatStreamFetchRequest(accessToken, callbacks);
 }
 
 export async function listAiChatConversations(
   accessToken: string,
-  params: { page?: number; pageSize?: number } = {}
+  params: { page?: number; pageSize?: number } = {},
 ) {
-  const page = params.page ?? 1
-  const pageSize = params.pageSize ?? 20
+  const page = params.page ?? 1;
+  const pageSize = params.pageSize ?? 20;
   const searchParams = new URLSearchParams({
     page: String(page),
     pageSize: String(pageSize),
-  })
+  });
 
   return aiChatJsonRequest<AiChatConversationListResponse>(
     `${AI_CHAT_CONVERSATIONS_PATH}?${searchParams.toString()}`,
     {
       accessToken,
-    }
-  )
+    },
+  );
 }
 
-export async function getAiChatConversation(
-  accessToken: string,
-  conversationId: string
-) {
+export async function getAiChatConversation(accessToken: string, conversationId: string) {
   return aiChatJsonRequest<AiChatConversationDetail>(
     `${AI_CHAT_CONVERSATIONS_PATH}/${conversationId}`,
     {
       accessToken,
-    }
-  )
+    },
+  );
 }
 
 export async function updateAiChatConversationTitle(
   accessToken: string,
   conversationId: string,
-  title: string
+  title: string,
 ) {
   return aiChatJsonRequest<Partial<AiChatConversationDetail> | null>(
     `${AI_CHAT_CONVERSATIONS_PATH}/${conversationId}`,
     {
-      method: "PATCH",
+      method: 'PATCH',
       accessToken,
       body: JSON.stringify({ title }),
-    }
-  )
+    },
+  );
 }
 
-export async function deleteAiChatConversation(
-  accessToken: string,
-  conversationId: string
-) {
-  return aiChatJsonRequest<null>(
-    `${AI_CHAT_CONVERSATIONS_PATH}/${conversationId}`,
-    {
-      method: "DELETE",
-      accessToken,
-    }
-  )
+export async function deleteAiChatConversation(accessToken: string, conversationId: string) {
+  return aiChatJsonRequest<null>(`${AI_CHAT_CONVERSATIONS_PATH}/${conversationId}`, {
+    method: 'DELETE',
+    accessToken,
+  });
 }
 
 type AiChatJsonRequestOptions = RequestInit & {
-  accessToken: string
-}
+  accessToken: string;
+};
 
 class AiChatStreamFetchRequest implements AiChatStreamRequest {
-  private abortController: AbortController | null = null
-  private readonly accessToken: string
-  private readonly callbacks: AiChatStreamCallbacks
-  private timeoutHandler: number | null = null
-  private streamTimeoutHandler: number | null = null
+  private abortController: AbortController | null = null;
+  private readonly accessToken: string;
+  private readonly callbacks: AiChatStreamCallbacks;
+  private timeoutHandler: number | null = null;
+  private streamTimeoutHandler: number | null = null;
 
-  constructor(
-    accessToken: string,
-    callbacks: AiChatStreamCallbacks
-  ) {
-    this.accessToken = accessToken
-    this.callbacks = callbacks
+  constructor(accessToken: string, callbacks: AiChatStreamCallbacks) {
+    this.accessToken = accessToken;
+    this.callbacks = callbacks;
   }
 
   run(params: AiChatRequestPayload) {
-    this.abortController = new AbortController()
-    void this.send(params, this.abortController)
-    return true
+    this.abortController = new AbortController();
+    void this.send(params, this.abortController);
+    return true;
   }
 
   abort() {
-    this.clearTimers()
-    this.abortController?.abort()
+    this.clearTimers();
+    this.abortController?.abort();
   }
 
-  private async send(
-    params: AiChatRequestPayload,
-    abortController: AbortController
-  ) {
-    let isTimeout = false
+  private async send(params: AiChatRequestPayload, abortController: AbortController) {
+    let isTimeout = false;
 
     this.timeoutHandler = window.setTimeout(() => {
-      isTimeout = true
-      abortController.abort()
-    }, 30000)
+      isTimeout = true;
+      abortController.abort();
+    }, 30000);
 
     try {
       const response = await fetch(AI_CHAT_STREAM_URL, {
-        method: "POST",
+        method: 'POST',
         headers: createAiChatRequestHeaders(this.accessToken, params),
         body: createAiChatRequestBody(params),
         signal: abortController.signal,
-      })
+      });
 
-      this.clearTimeoutHandler()
+      this.clearTimeoutHandler();
 
       if (!response.ok) {
-        throw new Error(`Fetch failed with status ${response.status}`)
+        throw new Error(`Fetch failed with status ${response.status}`);
       }
 
-      const responseBody = response.body
+      const responseBody = response.body;
 
       if (!responseBody) {
-        throw new Error("The response body is empty.")
+        throw new Error('The response body is empty.');
       }
 
-      const contentType = response.headers.get("content-type") || ""
+      const contentType = response.headers.get('content-type') || '';
 
-      if (contentType.split(";")[0].trim() === "application/json") {
-        await this.handleJsonResponse(response)
-        return
+      if (contentType.split(';')[0].trim() === 'application/json') {
+        await this.handleJsonResponse(response);
+        return;
       }
 
-      await this.handleSseResponse(responseBody)
+      await this.handleSseResponse(responseBody);
     } catch (error) {
-      this.clearTimers()
+      this.clearTimers();
 
       if (isTimeout) {
-        this.callbacks.onError?.(new Error("TimeoutError"))
-        return
+        this.callbacks.onError?.(new Error('TimeoutError'));
+        return;
       }
 
-      this.callbacks.onError?.(normalizeAiChatError(error))
+      this.callbacks.onError?.(normalizeAiChatError(error));
     }
   }
 
   private async handleJsonResponse(response: Response) {
-    const chunk = await response.json()
+    const chunk = await response.json();
 
     if (chunk?.success === false) {
-      const error = new Error(chunk.message || "System error")
-      error.name = chunk.name || "SystemError"
-      throw error
+      const error = new Error(chunk.message || 'System error');
+      error.name = chunk.name || 'SystemError';
+      throw error;
     }
 
-    this.callbacks.onUpdate?.(chunk)
-    this.callbacks.onSuccess?.()
+    this.callbacks.onUpdate?.(chunk);
+    this.callbacks.onSuccess?.();
   }
 
   private async handleSseResponse(responseBody: ReadableStream<Uint8Array>) {
     const stream = XStream<SSEOutput>({
       readableStream: responseBody,
-    })
-    const iterator = stream[Symbol.asyncIterator]()
+    });
+    const iterator = stream[Symbol.asyncIterator]();
 
     while (true) {
-      let isStreamTimeout = false
+      let isStreamTimeout = false;
 
       this.streamTimeoutHandler = window.setTimeout(() => {
-        isStreamTimeout = true
-        this.abortController?.abort()
-      }, 45000)
+        isStreamTimeout = true;
+        this.abortController?.abort();
+      }, 45000);
 
       try {
-        const result = await iterator.next()
+        const result = await iterator.next();
 
-        this.clearStreamTimeoutHandler()
+        this.clearStreamTimeoutHandler();
 
         if (result.done) {
-          break
+          break;
         }
 
         if (result.value) {
-          this.callbacks.onUpdate?.(result.value)
+          this.callbacks.onUpdate?.(result.value);
         }
       } catch (error) {
-        this.clearStreamTimeoutHandler()
+        this.clearStreamTimeoutHandler();
 
         if (isStreamTimeout) {
-          throw new Error("StreamTimeoutError", { cause: error })
+          throw new Error('StreamTimeoutError', { cause: error });
         }
 
-        throw error
+        throw error;
       }
     }
 
-    this.callbacks.onSuccess?.()
+    this.callbacks.onSuccess?.();
   }
 
   private clearTimeoutHandler() {
     if (this.timeoutHandler) {
-      window.clearTimeout(this.timeoutHandler)
-      this.timeoutHandler = null
+      window.clearTimeout(this.timeoutHandler);
+      this.timeoutHandler = null;
     }
   }
 
   private clearStreamTimeoutHandler() {
     if (this.streamTimeoutHandler) {
-      window.clearTimeout(this.streamTimeoutHandler)
-      this.streamTimeoutHandler = null
+      window.clearTimeout(this.streamTimeoutHandler);
+      this.streamTimeoutHandler = null;
     }
   }
 
   private clearTimers() {
-    this.clearTimeoutHandler()
-    this.clearStreamTimeoutHandler()
+    this.clearTimeoutHandler();
+    this.clearStreamTimeoutHandler();
   }
 }
 
 function createAiChatRequestHeaders(
   accessToken: string,
-  params: AiChatRequestPayload
+  params: AiChatRequestPayload,
 ): HeadersInit {
   const headers: HeadersInit = {
-    Accept: "text/event-stream",
+    Accept: 'text/event-stream',
     Authorization: `Bearer ${accessToken}`,
-  }
+  };
 
   if (!params.files?.length) {
-    headers["Content-Type"] = "application/json"
+    headers['Content-Type'] = 'application/json';
   }
 
-  return headers
+  return headers;
 }
 
 function createAiChatRequestBody(params: AiChatRequestPayload) {
@@ -332,205 +319,200 @@ function createAiChatRequestBody(params: AiChatRequestPayload) {
       max_tokens: params.max_tokens,
       system_prompt: params.system_prompt,
       thinking_mode: params.thinking_mode,
-    })
+    });
   }
 
-  const formData = new FormData()
+  const formData = new FormData();
 
-  appendFormDataValue(formData, "message", params.message)
-  appendFormDataValue(formData, "session_id", params.session_id)
-  appendFormDataValue(formData, "model", params.model)
-  appendFormDataValue(formData, "temperature", params.temperature)
-  appendFormDataValue(formData, "max_tokens", params.max_tokens)
-  appendFormDataValue(formData, "system_prompt", params.system_prompt)
-  appendFormDataValue(formData, "thinking_mode", params.thinking_mode)
+  appendFormDataValue(formData, 'message', params.message);
+  appendFormDataValue(formData, 'session_id', params.session_id);
+  appendFormDataValue(formData, 'model', params.model);
+  appendFormDataValue(formData, 'temperature', params.temperature);
+  appendFormDataValue(formData, 'max_tokens', params.max_tokens);
+  appendFormDataValue(formData, 'system_prompt', params.system_prompt);
+  appendFormDataValue(formData, 'thinking_mode', params.thinking_mode);
 
   for (const uploadFile of params.files) {
-    formData.append("files", uploadFile.file)
+    formData.append('files', uploadFile.file);
   }
 
   formData.append(
-    "relative_paths",
+    'relative_paths',
     JSON.stringify(
-      params.files.map(
-        (uploadFile) => uploadFile.relativePath || uploadFile.file.name
-      )
-    )
-  )
+      params.files.map((uploadFile) => uploadFile.relativePath || uploadFile.file.name),
+    ),
+  );
 
-  return formData
+  return formData;
 }
 
 function appendFormDataValue(
   formData: FormData,
   key: string,
-  value: string | number | boolean | null | undefined
+  value: string | number | boolean | null | undefined,
 ) {
   if (value == null) {
-    return
+    return;
   }
 
-  formData.append(key, String(value))
+  formData.append(key, String(value));
 }
 
 function normalizeAiChatError(error: unknown) {
   return error instanceof Error || error instanceof DOMException
     ? error
-    : new Error("Unknown error!")
+    : new Error('Unknown error!');
 }
 
-async function aiChatJsonRequest<T>(
-  path: string,
-  options: AiChatJsonRequestOptions
-) {
-  const { accessToken, headers, body, ...init } = options
-  const requestHeaders = new Headers(headers)
+async function aiChatJsonRequest<T>(path: string, options: AiChatJsonRequestOptions) {
+  const { accessToken, headers, body, ...init } = options;
+  const requestHeaders = new Headers(headers);
 
-  requestHeaders.set("Accept", "application/json")
+  requestHeaders.set('Accept', 'application/json');
 
-  if (body && !requestHeaders.has("Content-Type")) {
-    requestHeaders.set("Content-Type", "application/json")
+  if (body && !requestHeaders.has('Content-Type')) {
+    requestHeaders.set('Content-Type', 'application/json');
   }
 
-  requestHeaders.set("Authorization", `Bearer ${accessToken}`)
+  requestHeaders.set('Authorization', `Bearer ${accessToken}`);
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     body,
     headers: requestHeaders,
-  })
-  const payload = await parseAiChatResponsePayload(response)
+  });
+  const payload = await parseAiChatResponsePayload(response);
 
   if (!response.ok) {
-    throw new Error(readAiChatErrorMessage(payload, response.statusText))
+    throw new Error(readAiChatErrorMessage(payload, response.statusText));
   }
 
-  return payload as T
+  return payload as T;
 }
 
 async function parseAiChatResponsePayload(response: Response) {
-  const text = await response.text()
+  const text = await response.text();
 
   if (!text) {
-    return null
+    return null;
   }
 
   try {
-    return JSON.parse(text) as unknown
+    return JSON.parse(text) as unknown;
   } catch {
-    return text
+    return text;
   }
 }
 
 function readAiChatErrorMessage(payload: unknown, fallback: string) {
-  if (typeof payload === "string") {
-    return payload
+  if (typeof payload === 'string') {
+    return payload;
   }
 
-  if (!payload || typeof payload !== "object") {
-    return fallback || "请求失败"
+  if (!payload || typeof payload !== 'object') {
+    return fallback || '请求失败';
   }
 
-  const message = (payload as { message?: unknown }).message
+  const message = (payload as { message?: unknown }).message;
 
-  if (typeof message === "string") {
-    return message
+  if (typeof message === 'string') {
+    return message;
   }
 
-  const detail = (payload as { detail?: unknown }).detail
+  const detail = (payload as { detail?: unknown }).detail;
 
-  if (typeof detail === "string") {
-    return detail
+  if (typeof detail === 'string') {
+    return detail;
   }
 
-  return fallback || "请求失败"
+  return fallback || '请求失败';
 }
 
 export function parseAiChatStreamChunk(chunk: SSEOutput): AiChatStreamEvent {
-  const type = extractEventType(chunk)
-  const data = readChunkData(chunk)
+  const type = extractEventType(chunk);
+  const data = readChunkData(chunk);
 
   return {
     type,
-    sessionId: readStringRecordValue(data, "session_id"),
+    sessionId: readStringRecordValue(data, 'session_id'),
     content: type ? extractContent(data) : extractChunkText(chunk),
-    message: readStringRecordValue(data, "message"),
-    title: readStringRecordValue(data, "title"),
-    reasoning: readStringRecordValue(data, "reasoning"),
+    message: readStringRecordValue(data, 'message'),
+    title: readStringRecordValue(data, 'title'),
+    reasoning: readStringRecordValue(data, 'reasoning'),
+    reasoningTitle: readStringRecordValue(data, 'reasoning_title'),
+    reasoningContent: readStringRecordValue(data, 'reasoning_content'),
     errorMessage:
-      type === "error"
-        ? readStringRecordValue(data, "message") || "AI 服务返回错误。"
-        : null,
-  }
+      type === 'error' ? readStringRecordValue(data, 'message') || 'AI 服务返回错误。' : null,
+  };
 }
 
 export function getAiChatFriendlyErrorMessage(error: Error) {
-  if (error.name === "AbortError") {
-    return "已停止生成。"
+  if (error.name === 'AbortError') {
+    return '已停止生成。';
   }
 
-  if (error.message === "TimeoutError") {
-    return "请求超时，请稍后重试。"
+  if (error.message === 'TimeoutError') {
+    return '请求超时，请稍后重试。';
   }
 
-  if (error.message === "StreamTimeoutError") {
-    return "长时间没有收到新内容，请稍后重试。"
+  if (error.message === 'StreamTimeoutError') {
+    return '长时间没有收到新内容，请稍后重试。';
   }
 
   if (/status 401|status 403/.test(error.message)) {
-    return "当前没有访问该 AI 服务的权限，请检查登录状态或接口鉴权配置。"
+    return '当前没有访问该 AI 服务的权限，请检查登录状态或接口鉴权配置。';
   }
 
   if (/status 404/.test(error.message)) {
-    return "AI 接口地址不可用，请检查接口配置。"
+    return 'AI 接口地址不可用，请检查接口配置。';
   }
 
   if (/Failed to fetch|NetworkError|Load failed/i.test(error.message)) {
-    return "无法连接到 AI 服务，请检查网络、接口地址或跨域配置。"
+    return '无法连接到 AI 服务，请检查网络、接口地址或跨域配置。';
   }
 
-  return "AI 服务暂时不可用，请稍后再试。"
+  return 'AI 服务暂时不可用，请稍后再试。';
 }
 
 function parseJSON(value: string): unknown {
   try {
-    return JSON.parse(value)
+    return JSON.parse(value);
   } catch {
-    return value
+    return value;
   }
 }
 
 function readTextDelta(payload: unknown): string {
-  if (payload == null || payload === "[DONE]") {
-    return ""
+  if (payload == null || payload === '[DONE]') {
+    return '';
   }
 
-  if (typeof payload === "string") {
-    const parsedPayload = parseJSON(payload)
-    return parsedPayload === payload ? payload : readTextDelta(parsedPayload)
+  if (typeof payload === 'string') {
+    const parsedPayload = parseJSON(payload);
+    return parsedPayload === payload ? payload : readTextDelta(parsedPayload);
   }
 
-  if (typeof payload !== "object") {
-    return String(payload)
+  if (typeof payload !== 'object') {
+    return String(payload);
   }
 
-  const data = payload as Record<string, unknown>
-  const choices = data.choices
+  const data = payload as Record<string, unknown>;
+  const choices = data.choices;
 
   if (Array.isArray(choices)) {
     return choices
       .map((choice) => {
-        const item = choice as Record<string, unknown>
-        const delta = item.delta as Record<string, unknown> | undefined
-        const message = item.message as Record<string, unknown> | undefined
+        const item = choice as Record<string, unknown>;
+        const delta = item.delta as Record<string, unknown> | undefined;
+        const message = item.message as Record<string, unknown> | undefined;
 
         return (
           readTextDelta(delta?.content) ||
           readTextDelta(message?.content) ||
           readTextDelta(item.text)
-        )
+        );
       })
-      .join("")
+      .join('');
   }
 
   return (
@@ -539,48 +521,48 @@ function readTextDelta(payload: unknown): string {
     readTextDelta(data.message) ||
     readTextDelta(data.answer) ||
     readTextDelta(data.text)
-  )
+  );
 }
 
 function extractChunkText(chunk: SSEOutput) {
-  return readTextDelta(chunk.data ?? chunk)
+  return readTextDelta(chunk.data ?? chunk);
 }
 
 function readChunkData(chunk: SSEOutput): unknown {
-  return typeof chunk.data === "string" ? parseJSON(chunk.data) : chunk.data
+  return typeof chunk.data === 'string' ? parseJSON(chunk.data) : chunk.data;
 }
 
 function readRecordValue(data: unknown, key: string) {
-  if (!data || typeof data !== "object") {
-    return null
+  if (!data || typeof data !== 'object') {
+    return null;
   }
 
-  return (data as Record<string, unknown>)[key] ?? null
+  return (data as Record<string, unknown>)[key] ?? null;
 }
 
 function readStringRecordValue(data: unknown, key: string) {
-  const value = readRecordValue(data, key)
-  return typeof value === "string" ? value : null
+  const value = readRecordValue(data, key);
+  return typeof value === 'string' ? value : null;
 }
 
 function extractEventType(chunk: SSEOutput): AiChatStreamEventType | null {
-  const event = (chunk as { event?: unknown }).event
-  const type = (chunk as { type?: unknown }).type
-  const value = typeof event === "string" ? event : type
+  const event = (chunk as { event?: unknown }).event;
+  const type = (chunk as { type?: unknown }).type;
+  const value = typeof event === 'string' ? event : type;
 
   switch (value) {
-    case "session":
-    case "title":
-    case "reasoning":
-    case "delta":
-    case "done":
-    case "error":
-      return value
+    case 'session':
+    case 'title':
+    case 'reasoning':
+    case 'delta':
+    case 'done':
+    case 'error':
+      return value;
     default:
-      return null
+      return null;
   }
 }
 
 function extractContent(data: unknown) {
-  return readTextDelta(readRecordValue(data, "content") ?? data)
+  return readTextDelta(readRecordValue(data, 'content') ?? data);
 }

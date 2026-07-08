@@ -1,4 +1,7 @@
 import * as React from 'react';
+import ReactMarkdown, { type Components } from 'react-markdown';
+import remarkBreaks from 'remark-breaks';
+import remarkGfm from 'remark-gfm';
 import { toast } from 'sonner';
 import {
   Attachment,
@@ -16,8 +19,7 @@ import {
   BotIcon,
   CheckIcon,
   ChevronDownIcon,
-  ChevronUpIcon,
-  Clock3Icon,
+  CircleCheckIcon,
   CopyIcon,
   FileTextIcon,
   FolderIcon,
@@ -29,13 +31,14 @@ import {
 } from 'lucide-react';
 
 import { Button } from '@workspace/ui/components/button';
-import { Card, CardContent, CardFooter } from '@workspace/ui/components/card';
 import { Field, FieldGroup, FieldLabel } from '@workspace/ui/components/field';
 import { Marker, MarkerContent, MarkerIcon } from '@workspace/ui/components/marker';
+import { Separator } from '@workspace/ui/components/separator';
 import { Textarea } from '@workspace/ui/components/textarea';
 import { cn } from '@workspace/ui/lib/utils';
 import {
   AI_CHAT_THINKING_MAX_TOKENS,
+  type AiChatConversationAttachment,
   type AiChatConversationDetail,
   type AiChatThinkingMode,
   type AiChatStreamRequest,
@@ -56,6 +59,8 @@ type ChatMessage = {
   role: ChatRole;
   content: string;
   attachments?: ChatAttachment[];
+  reasoningTitle?: string;
+  reasoningContent?: string;
   reasoning?: string;
   status?: ChatStatus;
   time: string;
@@ -78,6 +83,12 @@ type PendingAttachment = ChatAttachment & {
 type ChatRequestFile = {
   file: File;
   relativePath: string;
+};
+
+type ReasoningStep = {
+  id: string;
+  title: string;
+  body: string;
 };
 
 type BrowserSpeechRecognitionAlternative = {
@@ -169,19 +180,45 @@ function formatMessageTime(date = new Date()) {
   }).format(date);
 }
 
+function mapConversationAttachments(
+  messageId: string,
+  attachments?: AiChatConversationAttachment[],
+): ChatAttachment[] | undefined {
+  if (!attachments?.length) {
+    return undefined;
+  }
+
+  return attachments.map((attachment, index) => ({
+    id: `${messageId}-attachment-${index}`,
+    name: attachment.filename,
+    size: attachment.size,
+    type: attachment.content_type ?? '',
+  }));
+}
+
 function mapConversationMessages(conversation: AiChatConversationDetail): ChatMessage[] {
   if (!conversation.messages.length) {
     return [];
   }
 
-  return conversation.messages.map((message) => ({
-    id: message.id,
-    role: message.role,
-    content: message.content,
-    reasoning: message.reasoning_content || undefined,
-    status: 'done',
-    time: formatMessageTime(new Date(message.created_at)),
-  }));
+  return conversation.messages.map((message) => {
+    const attachments =
+      message.role === 'user'
+        ? mapConversationAttachments(message.id, message.attachments)
+        : undefined;
+
+    return {
+      id: message.id,
+      role: message.role,
+      content: message.content,
+      ...(attachments ? { attachments } : {}),
+      reasoningTitle: message.reasoning_title || undefined,
+      reasoningContent: message.reasoning_content || undefined,
+      reasoning: message.reasoning_content || undefined,
+      status: 'done',
+      time: formatMessageTime(new Date(message.created_at)),
+    };
+  });
 }
 
 function getAttachmentKind(attachment: Pick<ChatAttachment, 'name' | 'type'>) {
@@ -217,6 +254,263 @@ function formatAttachmentSize(size: number) {
   const precision = unitIndex === 0 || value >= 10 ? 0 : 1;
 
   return `${value.toFixed(precision)} ${units[unitIndex]}`;
+}
+
+function getAttachmentDescription(attachment: Pick<ChatAttachment, 'name' | 'type' | 'size'>) {
+  return [
+    getAttachmentDisplayKind(attachment),
+    attachment.type,
+    formatAttachmentSize(attachment.size),
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+function getReasoningStatusLabel(message: Pick<ChatMessage, 'status'>) {
+  return message.status === 'streaming' ? '正在思考' : '已思考';
+}
+
+function normalizeReasoningMarkdown(content: string) {
+  const withoutCodeFences = content.replace(/^\s*```[^\n`]*\n?/gm, '').replace(/^\s*```\s*$/gm, '');
+
+  return withoutCodeFences
+    .replace(
+      /(^\s*\|.+\|\s*$\n^\s*\|(?:\s*:?-{3,}:?\s*\|)+\s*$\n(?:^\s*\|.+\|\s*$\n?)*)/gm,
+      (tableBlock) =>
+        tableBlock
+          .split('\n')
+          .filter((line) => line.trim())
+          .filter((line) => !/^\s*\|(?:\s*:?-{3,}:?\s*\|)+\s*$/.test(line))
+          .map((line) =>
+            line
+              .trim()
+              .replace(/^\||\|$/g, '')
+              .split('|')
+              .map((cell) => cell.trim())
+              .filter(Boolean)
+              .join('  '),
+          )
+          .join('\n'),
+    )
+    .trim();
+}
+
+function getMarkdownTextContent(children: React.ReactNode): string {
+  if (typeof children === 'string' || typeof children === 'number') {
+    return String(children);
+  }
+
+  if (Array.isArray(children)) {
+    return children.map(getMarkdownTextContent).join('');
+  }
+
+  if (React.isValidElement<{ children?: React.ReactNode }>(children)) {
+    return getMarkdownTextContent(children.props.children);
+  }
+
+  return '';
+}
+
+const reasoningMarkdownComponents = {
+  p({ node: _node, className, ...props }) {
+    void _node;
+    return (
+      <p
+        className={cn('my-1.5 leading-6 break-words first:mt-0 last:mb-0', className)}
+        {...props}
+      />
+    );
+  },
+  ul({ node: _node, className, ...props }) {
+    void _node;
+    return <ul className={cn('my-1.5 list-disc ps-5', className)} {...props} />;
+  },
+  ol({ node: _node, className, ...props }) {
+    void _node;
+    return <ol className={cn('my-1.5 list-decimal ps-5', className)} {...props} />;
+  },
+  li({ node: _node, className, ...props }) {
+    void _node;
+    return <li className={cn('my-0.5 ps-1 leading-6', className)} {...props} />;
+  },
+  code({ node: _node, children }) {
+    void _node;
+    return <>{children}</>;
+  },
+  pre({ node: _node, children }) {
+    void _node;
+    return (
+      <p className="my-1.5 whitespace-pre-wrap break-words">{getMarkdownTextContent(children)}</p>
+    );
+  },
+  table({ node: _node, className, ...props }) {
+    void _node;
+    return <div className={cn('my-1.5 flex flex-col gap-1', className)} {...props} />;
+  },
+  thead({ node: _node, ...props }) {
+    void _node;
+    return <div className="contents" {...props} />;
+  },
+  tbody({ node: _node, ...props }) {
+    void _node;
+    return <div className="contents" {...props} />;
+  },
+  tr({ node: _node, className, ...props }) {
+    void _node;
+    return <div className={cn('flex flex-wrap gap-x-3 gap-y-1', className)} {...props} />;
+  },
+  th({ node: _node, className, ...props }) {
+    void _node;
+    return <span className={cn('font-medium text-foreground', className)} {...props} />;
+  },
+  td({ node: _node, className, ...props }) {
+    void _node;
+    return <span className={cn(className)} {...props} />;
+  },
+} satisfies Components;
+
+function ReasoningMarkdownContent({ content }: { content: string }) {
+  return (
+    <div className="mt-1 min-w-0 text-muted-foreground">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkBreaks]}
+        skipHtml
+        components={reasoningMarkdownComponents}
+      >
+        {normalizeReasoningMarkdown(content)}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
+function cleanReasoningSectionTitle(title: string) {
+  return title
+    .replace(/^\s{0,3}#{1,6}\s+/, '')
+    .replace(/\s+#+\s*$/, '')
+    .replace(/^\s*(?:[-*+]\s+|\d+[.)]\s*)?/, '')
+    .replace(/^\*\*/, '')
+    .replace(/\*\*:?$/, '')
+    .replace(/[：:]\s*$/, '')
+    .trim();
+}
+
+function getExplicitReasoningSectionHeading(line: string) {
+  const trimmedLine = line.trim();
+
+  if (!trimmedLine) {
+    return null;
+  }
+
+  const markdownHeading = trimmedLine.match(/^#{1,6}\s+(.+)$/);
+
+  if (markdownHeading?.[1]) {
+    return {
+      title: cleanReasoningSectionTitle(markdownHeading[1]),
+      rest: '',
+    };
+  }
+
+  const numberedBoldTitle = trimmedLine.match(/^\d+[.)]\s+\*\*(.+?)\*\*:?\s*(.*)$/);
+
+  if (numberedBoldTitle?.[1]) {
+    return {
+      title: cleanReasoningSectionTitle(numberedBoldTitle[1]),
+      rest: numberedBoldTitle[2]?.trim() ?? '',
+    };
+  }
+
+  const standaloneBoldTitle = trimmedLine.match(/^\*\*(.+?)\*\*:?\s*$/);
+
+  if (standaloneBoldTitle?.[1]) {
+    return {
+      title: cleanReasoningSectionTitle(standaloneBoldTitle[1]),
+      rest: '',
+    };
+  }
+
+  return null;
+}
+
+function getExplicitReasoningSteps(message: ChatMessage, body: string) {
+  const lines = body.replace(/\r\n/g, '\n').split('\n');
+  const steps: ReasoningStep[] = [];
+  let currentTitle: string | null = null;
+  let currentBodyLines: string[] = [];
+
+  function pushStep() {
+    if (!currentTitle) {
+      return;
+    }
+
+    steps.push({
+      id: `${message.id}-reasoning-${steps.length}`,
+      title: currentTitle,
+      body: currentBodyLines.join('\n').trim(),
+    });
+  }
+
+  for (const line of lines) {
+    const nextHeading = getExplicitReasoningSectionHeading(line);
+
+    if (nextHeading) {
+      pushStep();
+      currentTitle = nextHeading.title;
+      currentBodyLines = nextHeading.rest ? [nextHeading.rest] : [];
+      continue;
+    }
+
+    if (currentTitle) {
+      currentBodyLines.push(line);
+    }
+  }
+
+  pushStep();
+
+  return steps;
+}
+
+function getReasoningSteps(message: ChatMessage | null): ReasoningStep[] {
+  if (!message) {
+    return [];
+  }
+
+  const body = message.reasoningContent ?? message.reasoning ?? '';
+
+  if (!body && !message.reasoningTitle) {
+    return [];
+  }
+
+  const explicitSteps = getExplicitReasoningSteps(message, body);
+
+  if (explicitSteps.length) {
+    return explicitSteps;
+  }
+
+  return [
+    {
+      id: `${message.id}-reasoning`,
+      title: '思考过程',
+      body,
+    },
+  ];
+}
+
+function getReasoningSourceAttachments(messages: ChatMessage[], assistantMessageId: string) {
+  const assistantIndex = messages.findIndex((message) => message.id === assistantMessageId);
+
+  if (assistantIndex <= 0) {
+    return [];
+  }
+
+  for (let index = assistantIndex - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+
+    if (message?.role === 'user') {
+      return message.attachments ?? [];
+    }
+  }
+
+  return [];
 }
 
 function getFileRelativePath(file: File) {
@@ -294,9 +588,7 @@ function AttachmentList({ attachments }: { attachments: ChatAttachment[] }) {
           </AttachmentMedia>
           <AttachmentContent>
             <AttachmentTitle title={attachment.name}>{attachment.name}</AttachmentTitle>
-            <AttachmentDescription>
-              {getAttachmentDisplayKind(attachment)} · {formatAttachmentSize(attachment.size)}
-            </AttachmentDescription>
+            <AttachmentDescription>{getAttachmentDescription(attachment)}</AttachmentDescription>
           </AttachmentContent>
         </Attachment>
       ))}
@@ -423,39 +715,156 @@ function VoiceInputPreview({
   );
 }
 
-function ThinkingPanel({ reasoning, isStreaming }: { reasoning: string; isStreaming: boolean }) {
-  const [isOpen, setIsOpen] = React.useState(false);
+function ThinkingSummaryButton({
+  message,
+  isActive,
+  onOpen,
+}: {
+  message: ChatMessage;
+  isActive: boolean;
+  onOpen: (messageId: string) => void;
+}) {
+  const statusLabel = getReasoningStatusLabel(message);
 
   return (
-    <div className="overflow-hidden rounded-[10px] border bg-muted/20">
-      <Marker
-        asChild
-        className="h-10 justify-between px-3 font-semibold transition-colors outline-none hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
-      >
-        <button
-          type="button"
-          aria-expanded={isOpen}
-          onClick={() => setIsOpen((current) => !current)}
-        >
-          <MarkerIcon>
-            <Clock3Icon />
-          </MarkerIcon>
-          <MarkerContent className="flex-1 truncate">
-            {isStreaming ? 'Thinking...' : 'Thinking'}
-          </MarkerContent>
-          <MarkerIcon
-            className={cn('text-muted-foreground transition-transform', !isOpen && 'rotate-180')}
-          >
-            <ChevronUpIcon />
-          </MarkerIcon>
-        </button>
-      </Marker>
-      {isOpen && (
-        <div className="max-h-[25rem] overflow-y-auto border-t px-4 py-4 text-[0.8125rem] leading-6 text-muted-foreground">
-          <p className="break-words whitespace-pre-wrap">{reasoning}</p>
-        </div>
+    <Marker
+      asChild
+      className={cn(
+        'w-fit rounded-full px-0 text-sm font-medium text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30',
+        isActive && 'text-foreground',
       )}
-    </div>
+    >
+      <button
+        type="button"
+        aria-expanded={isActive}
+        aria-label={`${statusLabel}，打开思考活动`}
+        onClick={() => onOpen(message.id)}
+      >
+        <MarkerContent className={cn(message.status === 'streaming' && 'shimmer')}>
+          {statusLabel}
+        </MarkerContent>
+        <MarkerIcon className={cn('transition-transform', isActive && 'rotate-180')}>
+          <ChevronDownIcon />
+        </MarkerIcon>
+      </button>
+    </Marker>
+  );
+}
+
+function ThinkingActivityPanel({
+  message,
+  attachments,
+  isOpen,
+  onClose,
+}: {
+  message: ChatMessage | null;
+  attachments: ChatAttachment[];
+  isOpen: boolean;
+  onClose: () => void;
+}) {
+  const steps = React.useMemo(() => getReasoningSteps(message), [message]);
+  const statusLabel = message ? getReasoningStatusLabel(message) : '已思考';
+
+  return (
+    <aside
+      aria-hidden={!isOpen}
+      className={cn(
+        'h-full min-h-0 overflow-hidden bg-background transition-[border-color,opacity,transform] duration-300 ease-out',
+        isOpen
+          ? 'translate-x-0 border-l opacity-100'
+          : 'pointer-events-none translate-x-5 border-l border-transparent opacity-0',
+      )}
+    >
+      <div className="flex h-full w-96 flex-col">
+        <header className="flex h-[3.25rem] shrink-0 items-center justify-between gap-3 border-b px-5">
+          <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">
+            <span className="truncate">活动</span>
+            <span className="text-muted-foreground">·</span>
+            <span className="truncate text-muted-foreground">{statusLabel}</span>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="关闭思考活动"
+            title="关闭思考活动"
+            className="rounded-full"
+            onClick={onClose}
+          >
+            <XIcon />
+          </Button>
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+          <section className="flex flex-col gap-4">
+            <h2 className="text-base font-semibold">思考</h2>
+            {steps.length ? (
+              <ol className="flex flex-col">
+                {steps.map((step, index) => {
+                  const isLast = index === steps.length - 1;
+                  const isStreamingStep = message?.status === 'streaming' && isLast;
+                  const isCompletedFinalStep = message?.status !== 'streaming' && isLast;
+
+                  return (
+                    <li key={step.id} className="flex min-w-0 gap-3">
+                      <div className="flex shrink-0 flex-col items-center pt-1">
+                        <span
+                          className={cn(
+                            'flex size-4 items-center justify-center rounded-full',
+                            isStreamingStep ? 'bg-muted text-muted-foreground' : 'text-foreground',
+                          )}
+                        >
+                          {isStreamingStep ? (
+                            <LoaderCircleIcon className="size-3 animate-spin" />
+                          ) : isCompletedFinalStep ? (
+                            <CircleCheckIcon className="size-4 text-muted-foreground" />
+                          ) : (
+                            <span className="size-1.5 rounded-full bg-foreground" />
+                          )}
+                        </span>
+                        {!isLast ? <span className="mt-1 w-px flex-1 bg-border" /> : null}
+                      </div>
+                      <div className="min-w-0 pb-5 text-sm leading-6">
+                        <p className="font-medium text-foreground">{step.title}</p>
+                        {step.body ? <ReasoningMarkdownContent content={step.body} /> : null}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            ) : (
+              <p className="text-sm leading-6 text-muted-foreground">暂无可展示的思考内容。</p>
+            )}
+          </section>
+          {attachments.length ? (
+            <>
+              <Separator className="my-5" />
+              <section className="flex flex-col gap-4">
+                <h2 className="text-base font-semibold">文件 · {attachments.length}</h2>
+                <div className="flex flex-col gap-3">
+                  {attachments.map((attachment) => (
+                    <Attachment
+                      key={attachment.id}
+                      size="sm"
+                      className="w-full border-transparent bg-transparent p-0 hover:bg-transparent"
+                    >
+                      <AttachmentMedia className="bg-transparent text-foreground">
+                        <FileTextIcon />
+                      </AttachmentMedia>
+                      <AttachmentContent>
+                        <AttachmentDescription className="font-mono text-[0.7rem] uppercase">
+                          {getAttachmentKind(attachment)}
+                        </AttachmentDescription>
+                        <AttachmentTitle>{attachment.name}</AttachmentTitle>
+                      </AttachmentContent>
+                    </Attachment>
+                  ))}
+                </div>
+              </section>
+            </>
+          ) : null}
+        </div>
+      </div>
+    </aside>
   );
 }
 
@@ -477,17 +886,23 @@ function UserMessageBubble({ message }: { message: ChatMessage }) {
 function AssistantMessageCard({
   message,
   canRetry,
+  isReasoningActive,
   onCopy,
+  onOpenReasoning,
   onRetry,
   onStop,
 }: {
   message: ChatMessage;
   canRetry: boolean;
+  isReasoningActive: boolean;
   onCopy: (message: ChatMessage) => void;
+  onOpenReasoning: (messageId: string) => void;
   onRetry: (messageId: string) => void;
   onStop: () => void;
 }) {
-  const hasReasoning = Boolean(message.reasoning);
+  const hasReasoning = Boolean(
+    message.reasoning || message.reasoningTitle || message.reasoningContent,
+  );
   const isStreaming = message.status === 'streaming';
   const hasContent = Boolean(message.content);
 
@@ -527,20 +942,15 @@ function AssistantMessageCard({
           </div>
         </div>
         <div className="flex flex-col px-3 py-3 text-sm leading-7">
-          {hasReasoning && isStreaming ? (
-            <Marker role="status" className="mb-3 font-mono text-xs leading-4">
-              <MarkerContent className="shimmer">Thinking •••</MarkerContent>
-            </Marker>
-          ) : null}
           {hasReasoning ? (
-            <ThinkingPanel
-              key={message.status}
-              reasoning={message.reasoning ?? ''}
-              isStreaming={isStreaming}
+            <ThinkingSummaryButton
+              message={message}
+              isActive={isReasoningActive}
+              onOpen={onOpenReasoning}
             />
           ) : null}
           {hasContent ? (
-            <MarkdownContent content={message.content} className={cn(hasReasoning && 'mt-5')} />
+            <MarkdownContent content={message.content} className={cn(hasReasoning && 'mt-3')} />
           ) : !hasReasoning ? (
             <span className="inline-flex items-center gap-2 text-muted-foreground">
               <LoaderCircleIcon className="size-4 animate-spin" />
@@ -556,13 +966,17 @@ function AssistantMessageCard({
 function MessageBubble({
   message,
   canRetry,
+  isReasoningActive,
   onCopyAssistant,
+  onOpenAssistantReasoning,
   onRetryAssistant,
   onStopAssistant,
 }: {
   message: ChatMessage;
   canRetry: boolean;
+  isReasoningActive: boolean;
   onCopyAssistant: (message: ChatMessage) => void;
+  onOpenAssistantReasoning: (messageId: string) => void;
   onRetryAssistant: (messageId: string) => void;
   onStopAssistant: () => void;
 }) {
@@ -574,7 +988,9 @@ function MessageBubble({
     <AssistantMessageCard
       message={message}
       canRetry={canRetry}
+      isReasoningActive={isReasoningActive}
       onCopy={onCopyAssistant}
+      onOpenReasoning={onOpenAssistantReasoning}
       onRetry={onRetryAssistant}
       onStop={onStopAssistant}
     />
@@ -595,6 +1011,9 @@ export function AiChatPage() {
   const [voiceLevels, setVoiceLevels] = React.useState(createVoiceWaveformLevels);
   const [isStreaming, setIsStreaming] = React.useState(false);
   const [isUserScrolling, setIsUserScrolling] = React.useState(false);
+  const [activeReasoningMessageId, setActiveReasoningMessageId] = React.useState<string | null>(
+    null,
+  );
   const messagesRef = React.useRef<ChatMessage[]>(initialMessages);
   const selectedConversationIdRef = React.useRef<string | null>(null);
   const sessionIdRef = React.useRef<string | null>(null);
@@ -628,6 +1047,33 @@ export function AiChatPage() {
   React.useEffect(() => {
     selectedConversationIdRef.current = selectedConversationId;
   }, [selectedConversationId]);
+
+  const activeReasoningMessage = React.useMemo(() => {
+    if (!activeReasoningMessageId) {
+      return null;
+    }
+
+    return (
+      messages.find(
+        (message) =>
+          (message.id === activeReasoningMessageId &&
+            message.role === 'assistant' &&
+            message.reasoning) ||
+          message.reasoningTitle ||
+          message.reasoningContent,
+      ) ?? null
+    );
+  }, [activeReasoningMessageId, messages]);
+
+  const activeReasoningAttachments = React.useMemo(() => {
+    if (!activeReasoningMessageId) {
+      return [];
+    }
+
+    return getReasoningSourceAttachments(messages, activeReasoningMessageId);
+  }, [activeReasoningMessageId, messages]);
+
+  const isReasoningPanelOpen = Boolean(activeReasoningMessage);
 
   React.useEffect(() => {
     window.dispatchEvent(
@@ -760,6 +1206,7 @@ export function AiChatPage() {
     setAttachments([]);
     setVoiceTranscript('');
     setIsStreaming(false);
+    setActiveReasoningMessageId(null);
   }, [setVisibleMessages, stopVoiceInput]);
 
   React.useEffect(() => {
@@ -1098,6 +1545,8 @@ export function AiChatPage() {
     let requestConversationId = conversationIdAtStart;
     let streamedContent = '';
     let streamedReasoning = '';
+    let streamedReasoningTitle: string | undefined;
+    let streamedReasoningContent: string | undefined;
     let streamFailed = false;
 
     activeRequestIdRef.current = requestId;
@@ -1140,17 +1589,32 @@ export function AiChatPage() {
             return;
           }
 
-          if (!event.content) {
+          if (!event.content && !event.reasoningTitle && event.reasoningContent === null) {
             return;
           }
 
-          streamedReasoning += event.content;
+          if (event.content) {
+            streamedReasoning += event.content;
+          }
+
+          if (event.reasoningTitle) {
+            streamedReasoningTitle = event.reasoningTitle;
+          }
+
+          if (event.reasoningContent !== null) {
+            streamedReasoningContent = event.reasoningContent;
+          } else if (event.content) {
+            streamedReasoningContent = streamedReasoning;
+          }
+
           updateAssistantMessageForConversation(
             requestConversationId,
             assistantMessageId,
             (message) => ({
               ...message,
-              reasoning: streamedReasoning,
+              reasoningTitle: streamedReasoningTitle,
+              reasoningContent: streamedReasoningContent,
+              reasoning: streamedReasoning || undefined,
             }),
           );
           return;
@@ -1176,12 +1640,20 @@ export function AiChatPage() {
         if (event.type === 'done') {
           streamedContent = event.message ?? streamedContent;
           streamedReasoning = shouldShowReasoning ? (event.reasoning ?? streamedReasoning) : '';
+          streamedReasoningTitle = shouldShowReasoning
+            ? (event.reasoningTitle ?? streamedReasoningTitle)
+            : undefined;
+          streamedReasoningContent = shouldShowReasoning
+            ? (event.reasoningContent ?? streamedReasoningContent)
+            : undefined;
           updateAssistantMessageForConversation(
             requestConversationId,
             assistantMessageId,
             (message) => ({
               ...message,
               content: streamedContent,
+              reasoningTitle: streamedReasoningTitle,
+              reasoningContent: streamedReasoningContent ?? (streamedReasoning || undefined),
               reasoning: streamedReasoning || undefined,
               status: 'done',
             }),
@@ -1203,6 +1675,8 @@ export function AiChatPage() {
             (message) => ({
               ...message,
               content: streamErrorMessage,
+              reasoningTitle: undefined,
+              reasoningContent: undefined,
               reasoning: undefined,
               status: 'error',
             }),
@@ -1247,7 +1721,7 @@ export function AiChatPage() {
             ...message,
             content:
               message.content ||
-              (message.reasoning
+              (message.reasoning || message.reasoningTitle || message.reasoningContent
                 ? '服务没有返回正式回答，请稍后重试或关闭思考模式。'
                 : '服务没有返回可展示的内容。'),
             status: 'done',
@@ -1281,6 +1755,8 @@ export function AiChatPage() {
             ...message,
             content:
               error.name === 'AbortError' ? message.content || friendlyMessage : friendlyMessage,
+            reasoningTitle: error.name === 'AbortError' ? message.reasoningTitle : undefined,
+            reasoningContent: error.name === 'AbortError' ? message.reasoningContent : undefined,
             reasoning: error.name === 'AbortError' ? message.reasoning : undefined,
             status: error.name === 'AbortError' ? 'done' : 'error',
           }),
@@ -1380,6 +1856,8 @@ export function AiChatPage() {
           ? {
               ...message,
               content: '',
+              reasoningTitle: undefined,
+              reasoningContent: undefined,
               reasoning: undefined,
               status: 'streaming',
               time: formatMessageTime(),
@@ -1456,6 +1934,10 @@ export function AiChatPage() {
   function handleChatModeChange(nextMode: ChatMode) {
     setChatMode(nextMode);
     setIsChatModeMenuOpen(false);
+  }
+
+  function handleOpenAssistantReasoning(messageId: string) {
+    setActiveReasoningMessageId((current) => (current === messageId ? null : messageId));
   }
 
   function clearVoiceTranscript() {
@@ -1874,68 +2356,81 @@ export function AiChatPage() {
   return (
     <div
       className={cn(
-        'box-border flex h-full min-h-0 flex-1 flex-col overflow-hidden p-4',
+        'box-border flex h-full min-h-0 flex-1 flex-col overflow-hidden',
         isNewConversation ? 'bg-background' : 'bg-muted/20',
       )}
     >
-      <Card
+      <div
         className={cn(
-          'grid min-h-0 flex-1 overflow-hidden bg-card py-[8px]',
-          isNewConversation
-            ? 'grid-rows-[minmax(0,1fr)] border-0 shadow-none'
-            : 'grid-rows-[minmax(0,1fr)_auto] rounded-2xl border shadow-[0_10px_30px_rgb(15_23_42/0.06)]',
+          'grid min-h-0 flex-1 overflow-hidden bg-background transition-[grid-template-columns] duration-300 ease-out',
+          isReasoningPanelOpen
+            ? 'grid-cols-[minmax(0,1fr)_24rem]'
+            : 'grid-cols-[minmax(0,1fr)_0rem]',
         )}
       >
-        <CardContent className="min-h-0 overflow-hidden bg-card p-0">
-          {isNewConversation ? (
-            <div className="flex h-full min-h-0 items-center justify-center px-6 pb-28">
-              <div className="flex w-full max-w-[49.5rem] flex-col items-center gap-7">
-                <h1 className="text-center text-[2rem] leading-tight font-semibold text-foreground">
-                  我们该从哪里开始?
-                </h1>
-                {renderPromptForm('center')}
-              </div>
-            </div>
-          ) : (
-            <div
-              ref={messageListRef}
-              className={cn(
-                'flex h-full min-h-0 flex-col gap-4 overflow-y-auto px-5 py-5',
-                isUserScrolling
-                  ? '[scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:bg-transparent'
-                  : '[scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
-              )}
-              onScroll={handleMessageListScroll}
-              onTouchMove={showUserScrollbar}
-              onWheel={showUserScrollbar}
-            >
-              {isConversationLoading ? (
-                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                  正在加载会话...
-                </div>
-              ) : (
-                messages.map((message, index) => (
-                  <MessageBubble
-                    key={message.id}
-                    message={message}
-                    canRetry={messages.slice(0, index).some((item) => item.role === 'user')}
-                    onCopyAssistant={handleCopyAssistantMessage}
-                    onRetryAssistant={handleRetryAssistantMessage}
-                    onStopAssistant={handleStop}
-                  />
-                ))
-              )}
-            </div>
+        <div
+          className={cn(
+            'grid min-h-0 overflow-hidden bg-background py-[8px]',
+            isNewConversation ? 'grid-rows-[minmax(0,1fr)]' : 'grid-rows-[minmax(0,1fr)_auto]',
           )}
-        </CardContent>
-        {!isNewConversation ? (
-          <>
-            <CardFooter className="sticky bottom-0 z-10 shrink-0 bg-card px-5 py-4">
+        >
+          <div className="min-h-0 overflow-hidden bg-background p-0">
+            {isNewConversation ? (
+              <div className="flex h-full min-h-0 items-center justify-center px-6 pb-28">
+                <div className="flex w-full max-w-[49.5rem] flex-col items-center gap-7">
+                  <h1 className="text-center text-[2rem] leading-tight font-semibold text-foreground">
+                    我们该从哪里开始?
+                  </h1>
+                  {renderPromptForm('center')}
+                </div>
+              </div>
+            ) : (
+              <div
+                ref={messageListRef}
+                className={cn(
+                  'flex h-full min-h-0 flex-col gap-4 overflow-y-auto px-5 py-5',
+                  isUserScrolling
+                    ? '[scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:bg-transparent'
+                    : '[scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+                )}
+                onScroll={handleMessageListScroll}
+                onTouchMove={showUserScrollbar}
+                onWheel={showUserScrollbar}
+              >
+                {isConversationLoading ? (
+                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                    正在加载会话...
+                  </div>
+                ) : (
+                  messages.map((message, index) => (
+                    <MessageBubble
+                      key={message.id}
+                      message={message}
+                      canRetry={messages.slice(0, index).some((item) => item.role === 'user')}
+                      isReasoningActive={activeReasoningMessageId === message.id}
+                      onCopyAssistant={handleCopyAssistantMessage}
+                      onOpenAssistantReasoning={handleOpenAssistantReasoning}
+                      onRetryAssistant={handleRetryAssistantMessage}
+                      onStopAssistant={handleStop}
+                    />
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+          {!isNewConversation ? (
+            <div className="sticky bottom-0 z-10 shrink-0 bg-background px-5 py-4">
               {renderPromptForm('footer')}
-            </CardFooter>
-          </>
-        ) : null}
-      </Card>
+            </div>
+          ) : null}
+        </div>
+        <ThinkingActivityPanel
+          message={activeReasoningMessage}
+          attachments={activeReasoningAttachments}
+          isOpen={isReasoningPanelOpen}
+          onClose={() => setActiveReasoningMessageId(null)}
+        />
+      </div>
     </div>
   );
 }
