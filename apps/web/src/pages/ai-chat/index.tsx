@@ -1,7 +1,4 @@
 import * as React from 'react';
-import ReactMarkdown, { type Components } from 'react-markdown';
-import remarkBreaks from 'remark-breaks';
-import remarkGfm from 'remark-gfm';
 import { toast } from 'sonner';
 import {
   Attachment,
@@ -270,117 +267,8 @@ function getReasoningStatusLabel(message: Pick<ChatMessage, 'status'>) {
   return message.status === 'streaming' ? '正在思考' : '已思考';
 }
 
-function normalizeReasoningMarkdown(content: string) {
-  const withoutCodeFences = content.replace(/^\s*```[^\n`]*\n?/gm, '').replace(/^\s*```\s*$/gm, '');
-
-  return withoutCodeFences
-    .replace(
-      /(^\s*\|.+\|\s*$\n^\s*\|(?:\s*:?-{3,}:?\s*\|)+\s*$\n(?:^\s*\|.+\|\s*$\n?)*)/gm,
-      (tableBlock) =>
-        tableBlock
-          .split('\n')
-          .filter((line) => line.trim())
-          .filter((line) => !/^\s*\|(?:\s*:?-{3,}:?\s*\|)+\s*$/.test(line))
-          .map((line) =>
-            line
-              .trim()
-              .replace(/^\||\|$/g, '')
-              .split('|')
-              .map((cell) => cell.trim())
-              .filter(Boolean)
-              .join('  '),
-          )
-          .join('\n'),
-    )
-    .trim();
-}
-
-function getMarkdownTextContent(children: React.ReactNode): string {
-  if (typeof children === 'string' || typeof children === 'number') {
-    return String(children);
-  }
-
-  if (Array.isArray(children)) {
-    return children.map(getMarkdownTextContent).join('');
-  }
-
-  if (React.isValidElement<{ children?: React.ReactNode }>(children)) {
-    return getMarkdownTextContent(children.props.children);
-  }
-
-  return '';
-}
-
-const reasoningMarkdownComponents = {
-  p({ node: _node, className, ...props }) {
-    void _node;
-    return (
-      <p
-        className={cn('my-1.5 leading-6 break-words first:mt-0 last:mb-0', className)}
-        {...props}
-      />
-    );
-  },
-  ul({ node: _node, className, ...props }) {
-    void _node;
-    return <ul className={cn('my-1.5 list-disc ps-5', className)} {...props} />;
-  },
-  ol({ node: _node, className, ...props }) {
-    void _node;
-    return <ol className={cn('my-1.5 list-decimal ps-5', className)} {...props} />;
-  },
-  li({ node: _node, className, ...props }) {
-    void _node;
-    return <li className={cn('my-0.5 ps-1 leading-6', className)} {...props} />;
-  },
-  code({ node: _node, children }) {
-    void _node;
-    return <>{children}</>;
-  },
-  pre({ node: _node, children }) {
-    void _node;
-    return (
-      <p className="my-1.5 whitespace-pre-wrap break-words">{getMarkdownTextContent(children)}</p>
-    );
-  },
-  table({ node: _node, className, ...props }) {
-    void _node;
-    return <div className={cn('my-1.5 flex flex-col gap-1', className)} {...props} />;
-  },
-  thead({ node: _node, ...props }) {
-    void _node;
-    return <div className="contents" {...props} />;
-  },
-  tbody({ node: _node, ...props }) {
-    void _node;
-    return <div className="contents" {...props} />;
-  },
-  tr({ node: _node, className, ...props }) {
-    void _node;
-    return <div className={cn('flex flex-wrap gap-x-3 gap-y-1', className)} {...props} />;
-  },
-  th({ node: _node, className, ...props }) {
-    void _node;
-    return <span className={cn('font-medium text-foreground', className)} {...props} />;
-  },
-  td({ node: _node, className, ...props }) {
-    void _node;
-    return <span className={cn(className)} {...props} />;
-  },
-} satisfies Components;
-
 function ReasoningMarkdownContent({ content }: { content: string }) {
-  return (
-    <div className="mt-1 min-w-0 text-muted-foreground">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkBreaks]}
-        skipHtml
-        components={reasoningMarkdownComponents}
-      >
-        {normalizeReasoningMarkdown(content)}
-      </ReactMarkdown>
-    </div>
-  );
+  return <MarkdownContent content={content} className="mt-1 text-muted-foreground" />;
 }
 
 function cleanReasoningSectionTitle(title: string) {

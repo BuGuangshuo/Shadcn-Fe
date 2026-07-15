@@ -2,6 +2,7 @@ import { type SSEOutput, XStream } from '@ant-design/x-sdk';
 
 export const AI_CHAT_STREAM_PATH = '/api/v1/ai/chat/stream';
 export const AI_CHAT_CONVERSATIONS_PATH = '/api/v1/ai/chat/conversations';
+export const AI_CHAT_CONVERSATIONS_SEARCH_PATH = `${AI_CHAT_CONVERSATIONS_PATH}/search`;
 export const AI_CHAT_THINKING_MAX_TOKENS = 4096;
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
@@ -50,6 +51,23 @@ export type AiChatConversationListResponse = {
   page: number;
   page_size: number;
   items: AiChatConversationSummary[];
+};
+
+export type AiChatConversationSearchType = 'conversation' | 'document';
+
+export type AiChatConversationSearchResult = {
+  conversation_id: string;
+  title: string;
+  type: AiChatConversationSearchType;
+  content: string;
+  time: string;
+};
+
+export type AiChatConversationSearchResponse = {
+  total: number;
+  page: number;
+  page_size: number;
+  items: AiChatConversationSearchResult[];
 };
 
 export type AiChatRequestPayload = {
@@ -110,6 +128,35 @@ export async function listAiChatConversations(
     `${AI_CHAT_CONVERSATIONS_PATH}?${searchParams.toString()}`,
     {
       accessToken,
+    },
+  );
+}
+
+export async function searchAiChatConversations(
+  accessToken: string,
+  params: {
+    keyword: string;
+    type?: AiChatConversationSearchType;
+    page?: number;
+    pageSize?: number;
+    signal?: AbortSignal;
+  },
+) {
+  const searchParams = new URLSearchParams({
+    keyword: params.keyword,
+    page: String(params.page ?? 1),
+    pageSize: String(params.pageSize ?? 8),
+  });
+
+  if (params.type) {
+    searchParams.set('type', params.type);
+  }
+
+  return aiChatJsonRequest<AiChatConversationSearchResponse>(
+    `${AI_CHAT_CONVERSATIONS_SEARCH_PATH}?${searchParams.toString()}`,
+    {
+      accessToken,
+      signal: params.signal,
     },
   );
 }

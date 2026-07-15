@@ -1,6 +1,8 @@
 import * as React from "react"
 import { Link, useLocation } from "react-router-dom"
 
+import { AiChatSearch } from "@/components/ai-chat-search"
+
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -99,6 +101,7 @@ export function NavMain({
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
+          <AiChatSearch />
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
