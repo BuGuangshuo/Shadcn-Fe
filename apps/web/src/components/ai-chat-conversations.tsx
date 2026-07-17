@@ -41,7 +41,10 @@ import {
 import { getStoredAuthTokens } from '@/service/auth';
 
 type RefreshConversationsEventDetail = {
-  selectFirst?: boolean;
+  preserveConversation?: {
+    id: string;
+    title?: string | null;
+  };
 };
 
 type ConversationTitleUpdatedEventDetail = {
@@ -72,7 +75,9 @@ export function AiChatConversations() {
   const [conversationPendingDeletion, setConversationPendingDeletion] =
     React.useState<AiChatConversationSummary | null>(null);
   const [editingTitle, setEditingTitle] = React.useState('');
-  const [isLoading, setIsLoading] = React.useState(false);
+  const [isLoading, setIsLoading] = React.useState(
+    () => Boolean(getStoredAuthTokens()?.accessToken),
+  );
   const [isMutating, setIsMutating] = React.useState(false);
   const [isChatStreaming, setIsChatStreaming] = React.useState(false);
   const isActionBusy = isMutating || isChatStreaming;
@@ -95,6 +100,11 @@ export function AiChatConversations() {
         if (isActive) {
           toast.error(error.message || '最近会话加载失败。');
         }
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsLoading(false);
+        }
       });
 
     return () => {
@@ -108,31 +118,45 @@ export function AiChatConversations() {
     dispatchSelectConversationEvent(conversation);
   }
 
-  async function refreshConversations(options: { selectFirst?: boolean } = {}) {
+  async function refreshConversations(options: RefreshConversationsEventDetail = {}) {
     const tokens = getStoredAuthTokens();
 
     if (!tokens?.accessToken) {
       return;
     }
 
-    setIsLoading(true);
-
     try {
       const response = await listAiChatConversations(tokens.accessToken);
 
-      setConversations(response.items);
+      setConversations((current) => {
+        const preservedConversationId = options.preserveConversation?.id;
 
-      if (options.selectFirst) {
-        const firstConversation = response.items[0];
-
-        if (firstConversation) {
-          selectConversation(firstConversation);
+        if (
+          !preservedConversationId ||
+          response.items.some((conversation) => conversation.id === preservedConversationId)
+        ) {
+          return response.items;
         }
-      }
+
+        const now = new Date().toISOString();
+        const existingConversation = current.find(
+          (conversation) => conversation.id === preservedConversationId,
+        );
+        const preservedConversation: AiChatConversationSummary = existingConversation ?? {
+          id: preservedConversationId,
+          title: options.preserveConversation?.title?.trim() || '新聊天',
+          created_at: now,
+          updated_at: now,
+          last_message_at: now,
+        };
+
+        return [
+          preservedConversation,
+          ...response.items.filter((conversation) => conversation.id !== preservedConversationId),
+        ];
+      });
     } catch (error) {
       toast.error(error instanceof Error && error.message ? error.message : '最近会话刷新失败。');
-    } finally {
-      setIsLoading(false);
     }
   }
 
@@ -146,7 +170,9 @@ export function AiChatConversations() {
     function handleRefreshConversations(event: Event) {
       const detail = (event as CustomEvent<RefreshConversationsEventDetail>).detail;
 
-      void refreshConversations({ selectFirst: detail?.selectFirst });
+      void refreshConversations({
+        preserveConversation: detail?.preserveConversation,
+      });
     }
 
     function handleStreamingChanged(event: Event) {

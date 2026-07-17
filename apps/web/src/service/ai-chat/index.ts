@@ -2,13 +2,18 @@ import { type SSEOutput, XStream } from '@ant-design/x-sdk';
 
 export const AI_CHAT_STREAM_PATH = '/api/v1/ai/chat/stream';
 export const AI_CHAT_CONVERSATIONS_PATH = '/api/v1/ai/chat/conversations';
+export const AI_CHAT_GENERATIONS_PATH = '/api/v1/ai/chat/generations';
 export const AI_CHAT_CONVERSATIONS_SEARCH_PATH = `${AI_CHAT_CONVERSATIONS_PATH}/search`;
 export const AI_CHAT_THINKING_MAX_TOKENS = 4096;
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
 const AI_CHAT_STREAM_URL = import.meta.env.VITE_AI_CHAT_API_URL || AI_CHAT_STREAM_PATH;
 
-export type AiChatStreamEventType = 'session' | 'title' | 'reasoning' | 'delta' | 'done' | 'error';
+export type AiChatGenerationStatus =
+  'queued' | 'thinking' | 'answering' | 'completed' | 'cancelled' | 'failed';
+
+export type AiChatStreamEventType =
+  'generation' | 'session' | 'status' | 'title' | 'reasoning' | 'delta' | 'done' | 'error';
 
 export type AiChatThinkingMode = 'auto' | 'thinking' | 'fast';
 
@@ -74,6 +79,7 @@ export type AiChatRequestPayload = {
   message: string;
   session_id?: string | null;
   thinking_mode?: AiChatThinkingMode;
+  resumable?: boolean;
   model?: string | null;
   temperature?: number | null;
   max_tokens?: number | null;
@@ -88,7 +94,9 @@ export type AiChatUploadFile = {
 
 export type AiChatStreamEvent = {
   type: AiChatStreamEventType | null;
+  generationId: string | null;
   sessionId: string | null;
+  status: AiChatGenerationStatus | null;
   content: string;
   message: string | null;
   title: string | null;
@@ -103,6 +111,21 @@ export type AiChatStreamRequest = {
   abort: () => void;
 };
 
+export type AiChatAbortableRequest = Pick<AiChatStreamRequest, 'abort'>;
+
+export type AiChatGenerationSnapshot = {
+  generation_id: string;
+  session_id: string;
+  prompt: string;
+  status: AiChatGenerationStatus;
+  title: string | null;
+  reasoning_content: string;
+  content: string;
+  error: string | null;
+  revision: number;
+  ttl: number;
+};
+
 type AiChatStreamCallbacks = {
   onUpdate?: (chunk: SSEOutput) => void;
   onSuccess?: () => void;
@@ -111,6 +134,26 @@ type AiChatStreamCallbacks = {
 
 export function createAiChatStreamRequest(accessToken: string, callbacks: AiChatStreamCallbacks) {
   return new AiChatStreamFetchRequest(accessToken, callbacks);
+}
+
+export function createAiChatGenerationStreamRequest(
+  accessToken: string,
+  generationId: string,
+  offsets: { reasoningOffset: number; contentOffset: number },
+  callbacks: AiChatStreamCallbacks,
+) {
+  const searchParams = new URLSearchParams({
+    reasoningOffset: String(offsets.reasoningOffset),
+    contentOffset: String(offsets.contentOffset),
+  });
+  const request = new AiChatGenerationStreamFetchRequest(
+    accessToken,
+    `${AI_CHAT_GENERATIONS_PATH}/${generationId}/stream?${searchParams.toString()}`,
+    callbacks,
+  );
+
+  request.run();
+  return request;
 }
 
 export async function listAiChatConversations(
@@ -161,10 +204,53 @@ export async function searchAiChatConversations(
   );
 }
 
-export async function getAiChatConversation(accessToken: string, conversationId: string) {
+export async function getAiChatConversation(
+  accessToken: string,
+  conversationId: string,
+  signal?: AbortSignal,
+) {
   return aiChatJsonRequest<AiChatConversationDetail>(
     `${AI_CHAT_CONVERSATIONS_PATH}/${conversationId}`,
     {
+      accessToken,
+      signal,
+    },
+  );
+}
+
+export async function getAiChatConversationGeneration(
+  accessToken: string,
+  conversationId: string,
+  signal?: AbortSignal,
+) {
+  return aiChatJsonRequest<AiChatGenerationSnapshot>(
+    `${AI_CHAT_CONVERSATIONS_PATH}/${conversationId}/generation`,
+    {
+      accessToken,
+      signal,
+    },
+  );
+}
+
+export async function getAiChatGeneration(
+  accessToken: string,
+  generationId: string,
+  signal?: AbortSignal,
+) {
+  return aiChatJsonRequest<AiChatGenerationSnapshot>(
+    `${AI_CHAT_GENERATIONS_PATH}/${generationId}`,
+    {
+      accessToken,
+      signal,
+    },
+  );
+}
+
+export async function cancelAiChatGeneration(accessToken: string, generationId: string) {
+  return aiChatJsonRequest<AiChatGenerationSnapshot>(
+    `${AI_CHAT_GENERATIONS_PATH}/${generationId}/cancel`,
+    {
+      method: 'POST',
       accessToken,
     },
   );
@@ -216,7 +302,9 @@ class AiChatStreamFetchRequest implements AiChatStreamRequest {
 
   abort() {
     this.clearTimers();
-    this.abortController?.abort();
+    if (!this.abortController?.signal.aborted) {
+      this.abortController?.abort();
+    }
   }
 
   private async send(params: AiChatRequestPayload, abortController: AbortController) {
@@ -264,6 +352,12 @@ class AiChatStreamFetchRequest implements AiChatStreamRequest {
       }
 
       this.callbacks.onError?.(normalizeAiChatError(error));
+    } finally {
+      this.clearTimers();
+
+      if (this.abortController === abortController) {
+        this.abortController = null;
+      }
     }
   }
 
@@ -340,6 +434,69 @@ class AiChatStreamFetchRequest implements AiChatStreamRequest {
   }
 }
 
+class AiChatGenerationStreamFetchRequest implements AiChatAbortableRequest {
+  private abortController: AbortController | null = null;
+  private readonly accessToken: string;
+  private readonly callbacks: AiChatStreamCallbacks;
+  private readonly url: string;
+
+  constructor(accessToken: string, url: string, callbacks: AiChatStreamCallbacks) {
+    this.accessToken = accessToken;
+    this.url = url;
+    this.callbacks = callbacks;
+  }
+
+  run() {
+    this.abort();
+    const abortController = new AbortController();
+
+    this.abortController = abortController;
+    void this.send(abortController);
+  }
+
+  abort() {
+    if (!this.abortController?.signal.aborted) {
+      this.abortController?.abort();
+    }
+  }
+
+  private async send(abortController: AbortController) {
+    try {
+      const response = await fetch(`${API_BASE_URL}${this.url}`, {
+        headers: {
+          Accept: 'text/event-stream',
+          Authorization: `Bearer ${this.accessToken}`,
+        },
+        signal: abortController.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Fetch failed with status ${response.status}`);
+      }
+
+      if (!response.body) {
+        throw new Error('The response body is empty.');
+      }
+
+      const stream = XStream<SSEOutput>({
+        readableStream: response.body,
+      });
+
+      for await (const chunk of stream) {
+        this.callbacks.onUpdate?.(chunk);
+      }
+
+      this.callbacks.onSuccess?.();
+    } catch (error) {
+      this.callbacks.onError?.(normalizeAiChatError(error));
+    } finally {
+      if (this.abortController === abortController) {
+        this.abortController = null;
+      }
+    }
+  }
+}
+
 function createAiChatRequestHeaders(
   accessToken: string,
   params: AiChatRequestPayload,
@@ -366,6 +523,7 @@ function createAiChatRequestBody(params: AiChatRequestPayload) {
       max_tokens: params.max_tokens,
       system_prompt: params.system_prompt,
       thinking_mode: params.thinking_mode,
+      resumable: params.resumable ?? true,
     });
   }
 
@@ -378,6 +536,7 @@ function createAiChatRequestBody(params: AiChatRequestPayload) {
   appendFormDataValue(formData, 'max_tokens', params.max_tokens);
   appendFormDataValue(formData, 'system_prompt', params.system_prompt);
   appendFormDataValue(formData, 'thinking_mode', params.thinking_mode);
+  appendFormDataValue(formData, 'resumable', params.resumable ?? true);
 
   for (const uploadFile of params.files) {
     formData.append('files', uploadFile.file);
@@ -431,7 +590,10 @@ async function aiChatJsonRequest<T>(path: string, options: AiChatJsonRequestOpti
   const payload = await parseAiChatResponsePayload(response);
 
   if (!response.ok) {
-    throw new Error(readAiChatErrorMessage(payload, response.statusText));
+    throw new AiChatHttpError(
+      readAiChatErrorMessage(payload, response.statusText),
+      response.status,
+    );
   }
 
   return payload as T;
@@ -481,7 +643,9 @@ export function parseAiChatStreamChunk(chunk: SSEOutput): AiChatStreamEvent {
 
   return {
     type,
+    generationId: readStringRecordValue(data, 'generation_id'),
     sessionId: readStringRecordValue(data, 'session_id'),
+    status: readAiChatGenerationStatus(data),
     content: type ? extractContent(data) : extractChunkText(chunk),
     message: readStringRecordValue(data, 'message'),
     title: readStringRecordValue(data, 'title'),
@@ -491,6 +655,22 @@ export function parseAiChatStreamChunk(chunk: SSEOutput): AiChatStreamEvent {
     errorMessage:
       type === 'error' ? readStringRecordValue(data, 'message') || 'AI 服务返回错误。' : null,
   };
+}
+
+export class AiChatHttpError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'AiChatHttpError';
+    this.status = status;
+  }
+}
+
+export function isAiChatHttpError(error: unknown, status?: number): error is AiChatHttpError {
+  return (
+    error instanceof AiChatHttpError && (typeof status !== 'number' || error.status === status)
+  );
 }
 
 export function getAiChatFriendlyErrorMessage(error: Error) {
@@ -592,13 +772,31 @@ function readStringRecordValue(data: unknown, key: string) {
   return typeof value === 'string' ? value : null;
 }
 
+function readAiChatGenerationStatus(data: unknown): AiChatGenerationStatus | null {
+  const status = readStringRecordValue(data, 'status');
+
+  switch (status) {
+    case 'queued':
+    case 'thinking':
+    case 'answering':
+    case 'completed':
+    case 'cancelled':
+    case 'failed':
+      return status;
+    default:
+      return null;
+  }
+}
+
 function extractEventType(chunk: SSEOutput): AiChatStreamEventType | null {
   const event = (chunk as { event?: unknown }).event;
   const type = (chunk as { type?: unknown }).type;
   const value = typeof event === 'string' ? event : type;
 
   switch (value) {
+    case 'generation':
     case 'session':
+    case 'status':
     case 'title':
     case 'reasoning':
     case 'delta':

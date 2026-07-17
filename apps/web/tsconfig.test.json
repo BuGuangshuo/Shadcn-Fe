@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": false,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": false,
+    "outDir": ".test-dist",
+    "rootDir": "src/pages/ai-chat",
+    "types": ["node"]
+  },
+  "include": [
+    "src/pages/ai-chat/generation-state.ts",
+    "src/pages/ai-chat/generation-state.test.ts"
+  ],
+  "exclude": []
+}

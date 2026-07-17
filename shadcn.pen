@@ -3832,6 +3832,245 @@
                       }
                     }
                   ]
+                },
+                {
+                  "type": "frame",
+                  "id": "LdSk01",
+                  "name": "Conversation Loading Skeleton · State",
+                  "enabled": false,
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "layout": "vertical",
+                  "gap": 16,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "LdSk02",
+                      "name": "Loading User Message Row · 1",
+                      "width": "fill_container",
+                      "justifyContent": "end",
+                      "children": [
+                        {
+                          "type": "rectangle",
+                          "id": "LdSk03",
+                          "name": "Loading User Bubble · 1",
+                          "fill": "$muted",
+                          "width": 384,
+                          "height": 40,
+                          "cornerRadius": 999
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "LdSk04",
+                      "name": "Loading Assistant Card · 1",
+                      "width": 768,
+                      "fill": "$card",
+                      "cornerRadius": 14,
+                      "stroke": "$border",
+                      "strokeWidth": 1,
+                      "layout": "vertical",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "LdSk05",
+                          "name": "Loading Assistant Header · 1",
+                          "width": "fill_container",
+                          "height": 44,
+                          "stroke": "$border",
+                          "strokeWidth": {
+                            "bottom": 1
+                          },
+                          "gap": 8,
+                          "padding": [
+                            0,
+                            12
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "rectangle",
+                              "id": "LdSk06",
+                              "name": "Loading Assistant Icon · 1",
+                              "fill": "$muted",
+                              "width": 16,
+                              "height": 16,
+                              "cornerRadius": 4
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "LdSk07",
+                              "name": "Loading Assistant Name · 1",
+                              "fill": "$muted",
+                              "width": 80,
+                              "height": 16,
+                              "cornerRadius": 4
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "LdSk08",
+                          "name": "Loading Assistant Body · 1",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 12,
+                          "padding": [
+                            16,
+                            12
+                          ],
+                          "children": [
+                            {
+                              "type": "rectangle",
+                              "id": "LdSk09",
+                              "name": "Loading Reasoning Line · 1",
+                              "fill": "$muted",
+                              "width": 96,
+                              "height": 16,
+                              "cornerRadius": 4
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "LdSk10",
+                              "name": "Loading Body Line · 1",
+                              "fill": "$muted",
+                              "width": "fill_container",
+                              "height": 16,
+                              "cornerRadius": 4
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "LdSk11",
+                              "name": "Loading Body Line · 2",
+                              "fill": "$muted",
+                              "width": 630,
+                              "height": 16,
+                              "cornerRadius": 4
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "LdSk12",
+                              "name": "Loading Body Line · 3",
+                              "fill": "$muted",
+                              "width": 492,
+                              "height": 16,
+                              "cornerRadius": 4
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "LdSk13",
+                      "name": "Loading User Message Row · 2",
+                      "width": "fill_container",
+                      "justifyContent": "end",
+                      "children": [
+                        {
+                          "type": "rectangle",
+                          "id": "LdSk14",
+                          "name": "Loading User Bubble · 2",
+                          "fill": "$muted",
+                          "width": 288,
+                          "height": 40,
+                          "cornerRadius": 999
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "LdSk15",
+                      "name": "Loading Assistant Card · 2",
+                      "width": 768,
+                      "fill": "$card",
+                      "cornerRadius": 14,
+                      "stroke": "$border",
+                      "strokeWidth": 1,
+                      "layout": "vertical",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "LdSk16",
+                          "name": "Loading Assistant Header · 2",
+                          "width": "fill_container",
+                          "height": 44,
+                          "stroke": "$border",
+                          "strokeWidth": {
+                            "bottom": 1
+                          },
+                          "gap": 8,
+                          "padding": [
+                            0,
+                            12
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "rectangle",
+                              "id": "LdSk17",
+                              "name": "Loading Assistant Icon · 2",
+                              "fill": "$muted",
+                              "width": 16,
+                              "height": 16,
+                              "cornerRadius": 4
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "LdSk18",
+                              "name": "Loading Assistant Name · 2",
+                              "fill": "$muted",
+                              "width": 80,
+                              "height": 16,
+                              "cornerRadius": 4
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "LdSk19",
+                          "name": "Loading Assistant Body · 2",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 12,
+                          "padding": [
+                            16,
+                            12
+                          ],
+                          "children": [
+                            {
+                              "type": "rectangle",
+                              "id": "LdSk20",
+                              "name": "Loading Reasoning Line · 2",
+                              "fill": "$muted",
+                              "width": 96,
+                              "height": 16,
+                              "cornerRadius": 4
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "LdSk21",
+                              "name": "Loading Body Line · 4",
+                              "fill": "$muted",
+                              "width": "fill_container",
+                              "height": 16,
+                              "cornerRadius": 4
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "LdSk22",
+                              "name": "Loading Body Line · 5",
+                              "fill": "$muted",
+                              "width": 630,
+                              "height": 16,
+                              "cornerRadius": 4
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
                 }
               ]
             },

@@ -10,6 +10,7 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+.test-dist
 *.local
 
 # env files (can opt-in for committing if needed)
